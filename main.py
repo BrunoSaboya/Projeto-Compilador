@@ -26,4 +26,4 @@ if len(sys.argv) != 2:
 else:
     expression = sys.argv[1]
     result = operacao(expression)
-    print("Resultado:", result)
+    print(result)
