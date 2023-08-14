@@ -2,7 +2,6 @@ import re
 import sys
 
 def operacao(expressao):
-    try:
         # Substitui os caracteres de subtração por adição de números negativos
         expressao = expressao.replace('-', '+-')
         
@@ -18,8 +17,6 @@ def operacao(expressao):
                 total += int(term)
         
         return total
-    except:
-        return "Erro: Expressão inválida."
 
 if len(sys.argv) != 2:
     print("Uso: python calculadora.py 'expressão'")
