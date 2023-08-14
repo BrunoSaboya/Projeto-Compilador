@@ -15,7 +15,7 @@ def operacao(expressao):
         for term in terms:
             if term:  # Ignora strings vazias após a divisão
                 total += int(term)
-        
+            raise ValueError(f"Termo inválido: {term}")
         return total
 
 if len(sys.argv) != 2:
