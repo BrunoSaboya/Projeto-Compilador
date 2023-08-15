@@ -27,12 +27,10 @@ else:
     
     if not expression:
         handle_error("Input vazio")
-    elif "+" in expression and "-" in expression:
+    elif expression.startswith('+') or expression.endswith('+'):
+        handle_error("String começa ou termina com uma operação")
+    elif "++" in expression or "--" in expression or "+-" in expression or "-+" in expression:
         handle_error("Mais de uma operação em sequência")
-    elif expression.startswith("+"):
-        handle_error("String começa com uma operação")
-    elif expression.endswith("+"):
-        handle_error("String termina com uma operação")
     elif " " in expression and not expression.replace(" ", "").isdigit():
         handle_error("Espaço sem operação entre números")
     else:
