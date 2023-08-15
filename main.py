@@ -23,7 +23,7 @@ if len(sys.argv) != 2:
     handle_error("Input vazio")
 else:
     expression = sys.argv[1]
-    expression = ' '.join(expression.split())
+    expression = ''.join(expression.split())  # Remove todos os espaços
     
     if not expression:
         handle_error("Input vazio")
@@ -31,8 +31,6 @@ else:
         handle_error("String começa ou termina com uma operação")
     elif "++" in expression or "--" in expression or "+-" in expression or "-+" in expression:
         handle_error("Mais de uma operação em sequência")
-    elif " " in expression and not expression.replace(" ", "").isdigit():
-        handle_error("Espaço sem operação entre números")
     else:
         try:
             result = evaluate_expression(expression)
