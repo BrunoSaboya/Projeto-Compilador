@@ -1,51 +1,42 @@
-# import re
-# import sys
-
-# def operacao(expressao):
-
-
-#         # Remove todos os espaços em branco da expressão usando uma expressão regular
-#         expressao = re.sub(r'\s', '', expressao)
-    
-#         # Separa a cadeia de operações em termos
-#         terms = expressao.split('+')
-        
-#         total = 0
-#         for term in terms:
-#             if term:  # Ignora strings vazias após a divisão
-#                 try:
-#                     total += int(term)
-#                 except ValueError:
-#                     raise ValueError(f"Termo inválido: {term}")
-#         return total
-
-# if len(sys.argv) != 2:
-#     print("Uso: python calculadora.py 'expressão'")
-# else:
-#     expression = sys.argv[1]
-#     result = operacao(expression)
-#     print(result)
-
-import re
 import sys
 
-def validate_expression(expression):
-    pattern = r'^\s*\d+(\s*[+-]\s*\d+)*\s*$'
-    return re.match(pattern, expression)
-
 def evaluate_expression(expression):
-    terms = re.findall(r'[+-]?\s*\d+', expression)
+    terms = expression.split('+')
     total = 0
+    
     for term in terms:
-        total += int(term)
+        if '-' in term:
+            sub_terms = term.split('-')
+            sub_total = int(sub_terms[0])
+            for sub_term in sub_terms[1:]:
+                sub_total -= int(sub_term)
+            total += sub_total
+        else:
+            total += int(term)
+    
     return total
 
+def handle_error(error_message):
+    print("Erro:", error_message, file=sys.stderr)
+
 if len(sys.argv) != 2:
-    print("Uso: python calculator.py 'expressão'")
+    handle_error("Input vazio")
 else:
     expression = sys.argv[1]
-    if validate_expression(expression):
-        result = evaluate_expression(expression)
-        print("Resultado:", result)
+    
+    if not expression:
+        handle_error("Input vazio")
+    elif "+" in expression and "-" in expression:
+        handle_error("Mais de uma operação em sequência")
+    elif expression.startswith("+"):
+        handle_error("String começa com uma operação")
+    elif expression.endswith("+"):
+        handle_error("String termina com uma operação")
+    elif " " in expression:
+        handle_error("Espaço sem operação entre números")
     else:
-        print("Erro: Expressão inválida.")
+        try:
+            result = evaluate_expression(expression)
+            print("Resultado:", result)
+        except:
+            handle_error("Expressão inválida")
