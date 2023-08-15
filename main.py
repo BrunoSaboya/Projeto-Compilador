@@ -34,6 +34,6 @@ else:
     else:
         try:
             result = evaluate_expression(expression)
-            print("Resultado:", result)
+            print(result)
         except:
             handle_error("Expressão inválida")
