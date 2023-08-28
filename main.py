@@ -55,6 +55,9 @@ class Parser:
     def parseExpression(self):
         result = self.parseTerm()
 
+        if self.tokenizer.next is not None and self.tokenizer.next.type not in ["PLUS", "MINUS", "EOF"]:
+            raise ValueError("Unexpected token: " + self.tokenizer.next.value)
+
         while self.tokenizer.next.type in ["PLUS", "MINUS"]:
             operator = self.tokenizer.next.value
             self.tokenizer.selectNext()
