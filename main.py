@@ -10,7 +10,7 @@ class Tokenizer:
         self.source = source.replace(" ", "").strip()
         self.position = 0
         self.next = None
-        
+    
     def selectNext(self):
         if self.position < len(self.source):
             current_char = self.source[self.position]
@@ -45,8 +45,7 @@ class Parser:
         if self.tokenizer.next.type == "INT":
             result = self.tokenizer.next.value
             self.tokenizer.selectNext()
-            result = self.tokenizer.selectNext()
-            
+
             while self.tokenizer.next.type in ["PLUS", "MINUS"]:
                 if self.tokenizer.next.value == "+":
                     self.tokenizer.selectNext()
@@ -74,6 +73,7 @@ class Parser:
     
     def run(self, code):
         Parser.tokenizer = Tokenizer(code)
+        Parser.tokenizer.selectNext()
         return self.parseExpression()
 
 if __name__ == "__main__":
