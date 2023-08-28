@@ -38,13 +38,16 @@ class Tokenizer:
 class Parser:
 
     tokenizer = None
-
     
     def parseExpression(self):
 
-        if self.tokenizer.next.type == "INT":
+        flag = False
+
+        if self.tokenizer.next.type == "INT" and flag == False:
             result = self.tokenizer.next.value
             self.tokenizer.selectNext()
+
+            flag = True
 
             while self.tokenizer.next.type in ["PLUS", "MINUS"]:
                 if self.tokenizer.next.value == "+":
@@ -65,7 +68,8 @@ class Parser:
                         raise ValueError("Expected INT after -")
                 else:
                     raise ValueError("Expected + or - operator")
-
+            if flag == True:
+                raise ValueError("Expected INT at the end of expression")
             return result
         else:
             raise ValueError("Expected INT at the beginning of expression")
