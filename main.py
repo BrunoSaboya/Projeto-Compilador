@@ -82,7 +82,7 @@ class Parser:
             elif operator == "/":
                 if operand == 0:
                     raise ValueError("Division by zero")
-                result /= operand
+                result //= operand
 
         return result
     
