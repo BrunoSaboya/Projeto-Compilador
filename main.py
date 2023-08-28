@@ -7,11 +7,17 @@ class Token:
 
 class Tokenizer:
     def __init__(self, source):
-        self.source = source.replace(" ", "").strip()
+        self.source = source
         self.position = 0
         self.next = None
     
+    def skipSpaces(self):
+        while self.position < len(self.source) and self.source[self.position].isspace():
+            self.position += 1
+    
     def selectNext(self):
+        self.skipSpaces()
+        
         if self.position < len(self.source):
             current_char = self.source[self.position]
 
@@ -36,44 +42,34 @@ class Tokenizer:
             self.next = Token("", "EOF")
 
 class Parser:
-
     tokenizer = None
     
     def parseExpression(self):
+        result = self.parseTerm()
 
-        flag = False
-
-        if self.tokenizer.next.type == "INT" and flag == False:
-            result = self.tokenizer.next.value
+        while self.tokenizer.next.type in ["PLUS", "MINUS"]:
+            operator = self.tokenizer.next.value
             self.tokenizer.selectNext()
 
-            flag = True
+            operand = self.parseTerm()
 
-            while self.tokenizer.next.type in ["PLUS", "MINUS"]:
-                if self.tokenizer.next.value == "+":
-                    self.tokenizer.selectNext()
+            if operator == "+":
+                result += operand
+            elif operator == "-":
+                result -= operand
 
-                    if self.tokenizer.next.type == "INT":
-                        result += self.tokenizer.next.value
-                        self.tokenizer.selectNext()
-                    else:
-                        raise ValueError("Expected INT after +")
-                elif self.tokenizer.next.value == "-":
-                    self.tokenizer.selectNext()
+        if self.tokenizer.next is not None and self.tokenizer.next.type not in ["PLUS", "MINUS", "EOF"]:
+            raise ValueError("Unexpected token: " + self.tokenizer.next.value)
 
-                    if self.tokenizer.next.type == "INT":
-                        result -= self.tokenizer.next.value
-                        self.tokenizer.selectNext()
-                    else:
-                        raise ValueError("Expected INT after -")
-                else:
-                    raise ValueError("Expected + or - operator")
-            if flag == True:
-                raise ValueError("Expected INT at the end of expression")
+        return result
+
+    def parseTerm(self):
+        if self.tokenizer.next.type == "INT":
+            result = self.tokenizer.next.value
+            self.tokenizer.selectNext()
             return result
         else:
-            raise ValueError("Expected INT at the beginning of expression")
-
+            raise ValueError("Expected INT in term")
     
     def run(self, code):
         Parser.tokenizer = Tokenizer(code)
