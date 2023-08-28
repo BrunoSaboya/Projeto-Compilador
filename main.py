@@ -1,7 +1,7 @@
 import sys
 
 class Token:
-    def __init__(self, type, value):
+    def __init__(self, value, type):
         self.type = type
         self.value = value
 
@@ -39,28 +39,29 @@ class Parser:
 
     tokenizer = None
 
-    @staticmethod
-    def parseExpression():
+    
+    def parseExpression(self):
 
-        if Parser.tokenizer.next.type == "INT":
-            result = Parser.tokenizer.next.value
-            Parser.tokenizer.selectNext()
+        if self.tokenizer.next.type == "INT":
+            result = self.tokenizer.next.value
+            self.tokenizer.selectNext()
+            result = self.tokenizer.selectNext()
+            
+            while self.tokenizer.next.type in ["PLUS", "MINUS"]:
+                if self.tokenizer.next.value == "+":
+                    self.tokenizer.selectNext()
 
-            while Parser.tokenizer.next.type in ["PLUS", "MINUS"]:
-                if Parser.tokenizer.next.value == "+":
-                    Parser.tokenizer.selectNext()
-
-                    if Parser.tokenizer.next.type == "INT":
-                        result += Parser.tokenizer.next.value
-                        Parser.tokenizer.selectNext()
+                    if self.tokenizer.next.type == "INT":
+                        result += self.tokenizer.next.value
+                        self.tokenizer.selectNext()
                     else:
                         raise ValueError("Expected INT after +")
-                elif Parser.tokenizer.next.value == "-":
-                    Parser.tokenizer.selectNext()
+                elif self.tokenizer.next.value == "-":
+                    self.tokenizer.selectNext()
 
-                    if Parser.tokenizer.next.type == "INT":
-                        result -= Parser.tokenizer.next.value
-                        Parser.tokenizer.selectNext()
+                    if self.tokenizer.next.type == "INT":
+                        result -= self.tokenizer.next.value
+                        self.tokenizer.selectNext()
                     else:
                         raise ValueError("Expected INT after -")
                 else:
@@ -70,17 +71,10 @@ class Parser:
         else:
             raise ValueError("Expected INT at the beginning of expression")
 
-    @staticmethod
-    def run(code):
-        tokenizer = Tokenizer(code)
-        parser = Parser(tokenizer)
-
-        result = parser.parseExpression()
-
-        if parser.tokenizer.next is not None:
-            raise SyntaxError("Parsing não completado. Token inválido ou não esperado.")
-
-        return result
+    
+    def run(self, code):
+        Parser.tokenizer = Tokenizer(code)
+        return self.parseExpression()
 
 if __name__ == "__main__":
     p = Parser()
