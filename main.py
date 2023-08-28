@@ -36,6 +36,14 @@ class Tokenizer:
                 self.next = Token("-", "MINUS")
                 self.position += 1
 
+            elif current_char == '*':
+                self.next = Token("*", "MULT")
+                self.position += 1
+
+            elif current_char == '/':
+                self.next = Token("/", "DIV")
+                self.position += 1
+
             else:
                 raise ValueError(f"Unexpected character: {current_char}")
         else:
@@ -58,18 +66,33 @@ class Parser:
             elif operator == "-":
                 result -= operand
 
-        if self.tokenizer.next is not None and self.tokenizer.next.type not in ["PLUS", "MINUS", "EOF"]:
-            raise ValueError("Unexpected token: " + self.tokenizer.next.value)
-
         return result
 
     def parseTerm(self):
+        result = self.parseFactor()
+
+        while self.tokenizer.next.type in ["MULT", "DIV"]:
+            operator = self.tokenizer.next.value
+            self.tokenizer.selectNext()
+
+            operand = self.parseFactor()
+
+            if operator == "*":
+                result *= operand
+            elif operator == "/":
+                if operand == 0:
+                    raise ValueError("Division by zero")
+                result /= operand
+
+        return result
+    
+    def parseFactor(self):
         if self.tokenizer.next.type == "INT":
             result = self.tokenizer.next.value
             self.tokenizer.selectNext()
             return result
         else:
-            raise ValueError("Expected INT in term")
+            raise ValueError("Expected INT in factor")
     
     def run(self, code):
         Parser.tokenizer = Tokenizer(code)
