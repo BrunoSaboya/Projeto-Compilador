@@ -44,6 +44,14 @@ class Tokenizer:
                 self.next = Token("/", "DIV")
                 self.position += 1
 
+            elif current_char == '(':
+                self.next = Token("(", "OPENPAR")
+                self.position += 1
+
+            elif current_char == ')':
+                self.next = Token(")", "CLOSEPAR")
+                self.position += 1
+
             else:
                 raise ValueError(f"Unexpected character: {current_char}")
         else:
@@ -94,6 +102,26 @@ class Parser:
             result = self.tokenizer.next.value
             self.tokenizer.selectNext()
             return result
+        
+        elif self.tokenizer.next.type == "PLUS":
+            self.tokenizer.selectNext()
+            result = self.parseFactor()
+            return result
+
+        elif self.tokenizer.next.type == "MINUS":
+            self.tokenizer.selectNext()
+            result = -self.parseFactor()
+            return result
+
+        elif self.tokenizer.next.type == "OPENPAR":
+            self.tokenizer.selectNext()
+            result = self.parseExpression()
+
+            if self.tokenizer.next.type != "CLOSEPAR":
+                raise ValueError("Expected )")
+            self.tokenizer.selectNext()
+            return result
+        
         else:
             raise ValueError("Expected INT in factor")
     
