@@ -63,7 +63,7 @@ class Parser:
     def parseExpression(self):
         result = self.parseTerm()
 
-        if self.tokenizer.next is not None and self.tokenizer.next.type not in ["PLUS", "MINUS", "EOF"]:
+        if self.tokenizer.next is not None and self.tokenizer.next.type not in ["PLUS", "MINUS", "EOF", "CLOSEPAR"]:
             raise ValueError("Unexpected token: " + self.tokenizer.next.value)
 
         while self.tokenizer.next.type in ["PLUS", "MINUS"]:
@@ -103,32 +103,34 @@ class Parser:
             self.tokenizer.selectNext()
             return result
         
-        elif self.tokenizer.next.type == "PLUS":
+        elif self.tokenizer.next.type in ["PLUS", "MINUS"]:
+            operator = self.tokenizer.next.value
             self.tokenizer.selectNext()
-            result = self.parseFactor()
-            return result
+            operand = self.parseFactor()
+            if operator == "+":
+                return operand
+            elif operator == "-":
+                return -operand
 
-        elif self.tokenizer.next.type == "MINUS":
-            self.tokenizer.selectNext()
-            result = -self.parseFactor()
-            return result
-
-        elif self.tokenizer.next.type == "OPENPAR":
-            self.tokenizer.selectNext()
+        elif self.tokenizer.next and self.tokenizer.next.type == "OPENPAR":
+            self.tokenizer.selectNext() 
             result = self.parseExpression()
-
-            if self.tokenizer.next.type != "CLOSEPAR":
-                raise ValueError("Expected )")
-            self.tokenizer.selectNext()
+            if not self.tokenizer.next or self.tokenizer.next.type != "CLOSEPAR":
+                raise ValueError("Expected closing parenthesis ')'")
+            self.tokenizer.selectNext() 
             return result
         
         else:
-            raise ValueError("Expected INT in factor")
+            raise ValueError("Expected INT, '+', '-', '(', or operator")
+        
     
     def run(self, code):
         Parser.tokenizer = Tokenizer(code)
         Parser.tokenizer.selectNext()
-        return self.parseExpression()
+        result = self.parseExpression()
+        if Parser.tokenizer.next.type != "EOF":
+            raise ValueError("Unexpected token: " + Parser.tokenizer.next.value)    
+        return result
 
 if __name__ == "__main__":
     p = Parser()
