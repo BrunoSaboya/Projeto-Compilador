@@ -5,6 +5,58 @@ class Token:
         self.type = type
         self.value = value
 
+class Node:
+    def __init__(self, value, children:list):
+        self.value = value
+        self.children = children
+
+    def evaluate(self):
+        pass
+
+class PreProcess:
+    @staticmethod
+    def filter(code):
+        n = 0
+        while n < len(code)-1:
+            if code[n] == '/' and code[n+1] == '/':
+                code = code[:n]
+                break
+            n += 1
+        return code
+    
+class BinaryOp(Node):
+    def evaluate(self):
+        left = self.children[0].evaluate()
+        right = self.children[1].evaluate()
+
+        if self.value == '+':
+            return left + right
+        elif self.value == '-':
+            return left - right
+        elif self.value == '*':
+            return left * right
+        elif self.value == '/':
+            return left // right
+        else:
+            raise Exception(f"Unexpected operator: {self.value}")
+
+class UnaryOp(Node):
+    def evaluate(self):
+        if self.value == '+':
+            return self.children[0].evaluate()
+        elif self.value == '-':
+            return -self.children[0].evaluate()
+        else:
+            raise Exception(f"Unexpected operator: {self.value}")  
+
+class IntVal(Node):
+    def evaluate(self):
+        return int(self.value)
+
+class NoOp(Node):
+    def evaluate(self):
+        pass 
+
 class Tokenizer:
     def __init__(self, source):
         self.source = source
@@ -58,73 +110,75 @@ class Tokenizer:
             self.next = Token("", "EOF")
 
 class Parser:
-    tokenizer = None
+
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.current = self.tokenizer.next
     
     def parseExpression(self):
         result = self.parseTerm()
 
-        if self.tokenizer.next is not None and self.tokenizer.next.type not in ["PLUS", "MINUS", "EOF", "CLOSEPAR"]:
-            raise ValueError("Unexpected token: " + self.tokenizer.next.value)
+        if self.current is not None and self.current.type not in ["PLUS", "MINUS", "EOF", "CLOSEPAR"]:
+            raise ValueError("Unexpected token: " + self.current.value)
 
-        while self.tokenizer.next.type in ["PLUS", "MINUS"]:
-            operator = self.tokenizer.next.value
+        while self.current.type in ["PLUS", "MINUS"]:
+            operator = self.current.value
             self.tokenizer.selectNext()
-
-            operand = self.parseTerm()
-
-            if operator == "+":
-                result += operand
-            elif operator == "-":
-                result -= operand
+            self.current = self.tokenizer.next
+            result = BinaryOp(operator, [result, self.parseTerm()])
 
         return result
 
     def parseTerm(self):
         result = self.parseFactor()
 
-        while self.tokenizer.next.type in ["MULT", "DIV"]:
-            operator = self.tokenizer.next.value
+        while self.current.type in ["MULT", "DIV"]:
+            operator = self.current.value
             self.tokenizer.selectNext()
-
-            operand = self.parseFactor()
-
-            if operator == "*":
-                result *= operand
-            elif operator == "/":
-                if operand == 0:
-                    raise ValueError("Division by zero")
-                result //= operand
-
+            self.current = self.tokenizer.next
+            
+            result = BinaryOp(operator, [result, self.parseFactor()])
+            
         return result
     
     def parseFactor(self):
-        if self.tokenizer.next.type == "INT":
-            result = self.tokenizer.next.value
-            self.tokenizer.selectNext()
-            return result
-        
-        elif self.tokenizer.next.type in ["PLUS", "MINUS"]:
-            operator = self.tokenizer.next.value
-            self.tokenizer.selectNext()
-            operand = self.parseFactor()
-            if operator == "+":
-                return operand
-            elif operator == "-":
-                return -operand
 
-        elif self.tokenizer.next and self.tokenizer.next.type == "OPENPAR":
-            self.tokenizer.selectNext() 
-            result = self.parseExpression()
-            if not self.tokenizer.next or self.tokenizer.next.type != "CLOSEPAR":
-                raise ValueError("Expected closing parenthesis ')'")
-            self.tokenizer.selectNext() 
-            return result
+        sign = 1
+
+        if self.current.type == "INT":
+            result = self.current.value
+            self.tokenizer.selectNext()
+            self.current = self.tokenizer.next
+            return IntVal(result, [])
         
-        else:
-            raise ValueError("Expected INT, '+', '-', '(', or operator")
+        if self.current.type in ["PLUS", "MINUS"]:
+            if self.current.value == "-":
+                sign = -1
+            self.tokenizer.selectNext()
+            self.current = self.tokenizer.next
+            unary_op = "+" if sign == 1 else "-"
+            return UnaryOp(unary_op, [self.parseFactor()])
+            
+        if self.tokenizer.next and self.tokenizer.next.type == "OPENPAR":
+            self.tokenizer.selectNext()
+            self.current = self.tokenizer.next
+            result = self.parseExpression()
+            if self.current.type == "CLOSEPAR":
+                self.tokenizer.selectNext()
+                self.current = self.tokenizer.next
+                unary_operator = '+' if sign == 1 else '-'
+                return UnaryOp(unary_operator, [result])
+            else:
+                raise ValueError("Expected closing parenthesis ')'")
+
+        if self.current.value == "CLOSEPAR":
+            raise ValueError("Unexpected closing parenthesis ')'")
+        
+        raise ValueError("Expected INT, '+', '-', '(', or operator")
         
     
     def run(self, code):
+        code = PreProcess().filter(code)
         Parser.tokenizer = Tokenizer(code)
         Parser.tokenizer.selectNext()
         result = self.parseExpression()
