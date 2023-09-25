@@ -1,38 +1,33 @@
 import sys
-import re
 
 class Token:
     def __init__(self, value, type):
-        self.type = type
         self.value = value
+        self.type = type
 
 class Node:
-    def __init__(self, value, children:list):
+    def __init__(self, value, children=[]):
         self.value = value
         self.children = children
 
     def evaluate(self):
         pass
 
-class PreProcess:
+class PrePro:
     @staticmethod
     def filter(code):
-        lines = code.split('\n')
-        filtered_lines = []
+        i = 0
+        while i < len(code) - 1:
+            if code[i] == '/' and code[i + 1] == '/':
+                code = code[:i]
+                break
+            i += 1
+        return code
 
-        for line in lines:
-            parts = line.split('//', 1)
-            filtered_line = parts[0].strip()
-            if filtered_line:
-                filtered_lines.append(filtered_line)
-
-        return ' '.join(filtered_lines)
-    
-class BinaryOp(Node):
+class BinOp(Node):
     def evaluate(self):
         left = self.children[0].evaluate()
         right = self.children[1].evaluate()
-
         if self.value == '+':
             return left + right
         elif self.value == '-':
@@ -42,16 +37,16 @@ class BinaryOp(Node):
         elif self.value == '/':
             return left // right
         else:
-            raise Exception(f"Unexpected operator: {self.value}")
+            raise Exception('Invalid operator')
 
-class UnaryOp(Node):
+class UnOp(Node):
     def evaluate(self):
         if self.value == '+':
             return self.children[0].evaluate()
         elif self.value == '-':
             return -self.children[0].evaluate()
         else:
-            raise Exception(f"Unexpected operator: {self.value}")  
+            raise Exception('Invalid operator')
 
 class IntVal(Node):
     def evaluate(self):
@@ -59,137 +54,124 @@ class IntVal(Node):
 
 class NoOp(Node):
     def evaluate(self):
-        pass 
+        pass
 
 class Tokenizer:
     def __init__(self, source):
         self.source = source
         self.position = 0
         self.next = None
-    
-    def skipSpaces(self):
+        self.selectNext()
+
+    def selectNext(self):
         while self.position < len(self.source) and self.source[self.position].isspace():
             self.position += 1
-    
-    def selectNext(self):
-        self.skipSpaces()
-        
-        if self.position < len(self.source):
-            current_char = self.source[self.position]
 
-            if current_char.isdigit():
-                value = ""
-                while self.position < len(self.source) and self.source[self.position].isdigit():
-                    value += self.source[self.position]
+        if self.position >= len(self.source):
+            self.next = Token(None, 'EOF')
+            return
+
+        char = self.source[self.position]
+        self.position += 1
+
+        if char in ['+', '-', '*', '/']:
+            self.next = Token(char, 'OPERATOR')
+        elif char in ['(', ')']:
+            self.next = Token(char, 'PARENTHESIS')
+        elif char.isdigit():
+            number = ''
+            while char.isdigit():
+                number += char
+                if self.position >= len(self.source):
+                    break
+                char = self.source[self.position]
+                if char.isdigit():
                     self.position += 1
-                self.next = Token(int(value), "INT")
-
-            elif current_char == '+':
-                self.next = Token("+", "PLUS")
-                self.position += 1
-
-            elif current_char == '-':
-                self.next = Token("-", "MINUS")
-                self.position += 1
-
-            elif current_char == '*':
-                self.next = Token("*", "MULT")
-                self.position += 1
-
-            elif current_char == '/':
-                self.next = Token("/", "DIV")
-                self.position += 1
-
-            elif current_char == '(':
-                self.next = Token("(", "OPENPAR")
-                self.position += 1
-
-            elif current_char == ')':
-                self.next = Token(")", "CLOSEPAR")
-                self.position += 1
-
-            else:
-                raise ValueError(f"Unexpected character: {current_char}")
+                elif char.isspace() or char in ['+', '-', '*', '/', '(', ')']:
+                    break
+                else:
+                    raise Exception(f"Unexpected character 1 {char}")
+            self.next = Token(int(number), 'NUMBER')
         else:
-            self.next = Token("", "EOF")
+            raise Exception(f"Unexpected character 2 {char}")
 
 class Parser:
-
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
         self.current = self.tokenizer.next
-        self.tokenizer.selectNext()
-    
-    def parseExpression(self):
-        result = self.parseTerm()
 
-        if self.current is not None and self.current.type not in ["PLUS", "MINUS", "EOF", "CLOSEPAR"]:
-            raise ValueError("Unexpected token: " + self.current.value)
-
-        while self.current and self.current.type in ["PLUS", "MINUS"]:
-            operator = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            result = BinaryOp(operator, [result, self.parseTerm()])
-
-        return result
-
-    def parseTerm(self):
-        result = self.parseFactor()
-
-        while self.current.type in ["MULT", "DIV"]:
-            operator = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            
-            result = BinaryOp(operator, [result, self.parseFactor()])
-            
-        return result
-    
     def parseFactor(self):
-
         sign = 1
+        #print(f"Parsing factor: {self.current.value}, {self.current.type}")
 
-        if self.current.type == "INT":
-            result = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            return IntVal(result, [])
-        
-        if self.current.type in ["PLUS", "MINUS"]:
-            if self.current.value == "-":
+        if self.current.type == "OPERATOR" and self.current.value in ['+', '-']:
+            if self.current.value == '-':
                 sign = -1
             self.tokenizer.selectNext()
             self.current = self.tokenizer.next
-            unary_op = "+" if sign == 1 else "-"
-            return UnaryOp(unary_op, [self.parseFactor()])
-            
-        if self.tokenizer.next and self.tokenizer.next.type == "OPENPAR":
+            unary_operator = '+' if sign == 1 else '-'
+            #print(f"Unary operator: {unary_operator}")
+            return UnOp(unary_operator, [self.parseFactor()])
+
+        if self.current.type == 'NUMBER':
+            value = self.current.value
             self.tokenizer.selectNext()
             self.current = self.tokenizer.next
-            result = self.parseExpression()
-            if self.current.type == "CLOSEPAR":
+            #print(f"Number value: {value}")
+            return IntVal(value)
+
+        if self.current.type == "PARENTHESIS" and self.current.value == '(':
+            self.tokenizer.selectNext()
+            self.current = self.tokenizer.next
+            node = self.parseExpression()
+            if self.current.type == "PARENTHESIS" and self.current.value == ')':
                 self.tokenizer.selectNext()
                 self.current = self.tokenizer.next
                 unary_operator = '+' if sign == 1 else '-'
-                return UnaryOp(unary_operator, [result])
+                #print(f"Closing parenthesis with unary operator: {unary_operator}")
+                return UnOp(unary_operator, [node])
             else:
-                raise ValueError("Expected closing parenthesis ')'")
+                raise Exception('Expected closing parenthesis')
 
-        if self.current.value == "CLOSEPAR":
-            raise ValueError("Unexpected closing parenthesis ')'")
-        
-        raise ValueError("Expected INT, '+', '-', '(', or operator")
-        
+        if self.current.type == "PARENTHESIS" and self.current.value == ')':
+            raise Exception("Unmatched or unexpected closing parenthesis")
+
+        raise Exception('Invalid factor')
+
+    def parseTerm(self):
+        result = self.parseFactor()
+        #print(f"Parsing term: {result.value}")
+
+        while self.current.type == 'OPERATOR' and self.current.value in ['*', '/']:
+            operator = self.current.value
+            self.tokenizer.selectNext()
+            self.current = self.tokenizer.next
+            result = BinOp(operator, [result, self.parseFactor()])
+            #print(f"Operator: {operator}")
+
+        return result
+
+    def parseExpression(self):
+        result = self.parseTerm()
+        #print(f"Parsing expression: {result.value}")
+
+        while self.current.type == 'OPERATOR' and self.current.value in ['+', '-']:
+            operator = self.current.value
+            self.tokenizer.selectNext()
+            self.current = self.tokenizer.next
+            result = BinOp(operator, [result, self.parseTerm()])
+            #print(f"Operator: {operator}")
+
+        return result
+
     @staticmethod
     def run(code):
-        code = PreProcess().filter(code)
+        code = PrePro().filter(code)
         tokenizer = Tokenizer(code)
         parser = Parser(tokenizer)
-
         result = parser.parseExpression()
 
-        if parser.current and parser.current.type != 'EOF':
+        if parser.current.type != 'EOF':
             raise Exception(f'Invalid expression, stopped at {parser.current.value} of type {parser.current.type}')
 
         return result
@@ -199,8 +181,8 @@ def main():
         print("Usage: python script_name.py '<expression>'", file=sys.stderr)
         return
     try:
-        with open (sys.argv[1], "r") as myfile:
-            data=myfile.read().replace('\n', '')
+        with open(sys.argv[1], "r") as myfile:
+            data = myfile.read().replace('\n', '')
         ast_root = Parser.run(data)
         result = ast_root.evaluate()
         print(result)
