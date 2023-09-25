@@ -17,9 +17,16 @@ class Node:
 class PreProcess:
     @staticmethod
     def filter(code):
-        code = re.sub(r'//.*?(\n|$)', '\n', code)
-        return code
+        lines = code.split('\n')
+        filtered_lines = []
 
+        for line in lines:
+            parts = line.split('//', 1)
+            filtered_line = parts[0].strip()
+            if filtered_line:
+                filtered_lines.append(filtered_line)
+
+        return ' '.join(filtered_lines)
     
 class BinaryOp(Node):
     def evaluate(self):
