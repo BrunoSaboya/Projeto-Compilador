@@ -118,6 +118,7 @@ class Parser:
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
         self.current = self.tokenizer.next
+        self.tokenizer.selectNext()
     
     def parseExpression(self):
         result = self.parseTerm()
@@ -125,7 +126,7 @@ class Parser:
         if self.current is not None and self.current.type not in ["PLUS", "MINUS", "EOF", "CLOSEPAR"]:
             raise ValueError("Unexpected token: " + self.current.value)
 
-        while self.current.type in ["PLUS", "MINUS"]:
+        while self.current and self.current.type in ["PLUS", "MINUS"]:
             operator = self.current.value
             self.tokenizer.selectNext()
             self.current = self.tokenizer.next
@@ -188,7 +189,7 @@ class Parser:
 
         result = parser.parseExpression()
 
-        if parser.current.type != 'EOF':
+        if parser.current and parser.current.type != 'EOF':
             raise Exception(f'Invalid expression, stopped at {parser.current.value} of type {parser.current.type}')
 
         return result
