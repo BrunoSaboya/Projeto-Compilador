@@ -16,13 +16,16 @@ class Node:
 class PreProcess:
     @staticmethod
     def filter(code):
-        n = 0
-        while n < len(code)-1:
-            if code[n] == '/' and code[n+1] == '/':
-                code = code[:n]
-                break
-            n += 1
-        return code
+        lines = code.split('\n')
+        filtered_lines = []
+
+        for line in lines:
+            line = line.split('//')[0].strip()
+            if line:
+                filtered_lines.append(line)
+
+        return ' '.join(filtered_lines)
+
     
 class BinaryOp(Node):
     def evaluate(self):
