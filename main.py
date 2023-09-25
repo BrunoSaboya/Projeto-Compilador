@@ -186,7 +186,18 @@ class Parser:
             raise ValueError("Unexpected token: " + Parser.tokenizer.next.value)    
         return result
 
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python script_name.py '<expression>'", file=sys.stderr)
+        return
+    try:
+        with open (sys.argv[1], "r") as myfile:
+            data=myfile.read().replace('\n', '')
+        ast_root = Parser.run(data)
+        result = ast_root.evaluate()
+        print(result)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+
 if __name__ == "__main__":
-    p = Parser()
-    teste = p.run(sys.argv[1])
-    print(teste)
+    main()
