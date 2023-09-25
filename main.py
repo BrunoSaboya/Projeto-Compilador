@@ -1,4 +1,5 @@
 import sys
+import re
 
 class Token:
     def __init__(self, value, type):
@@ -16,15 +17,8 @@ class Node:
 class PreProcess:
     @staticmethod
     def filter(code):
-        lines = code.split('\n')
-        filtered_lines = []
-
-        for line in lines:
-            line = line.split('//')[0].strip()
-            if line:
-                filtered_lines.append(line)
-
-        return ' '.join(filtered_lines)
+        code = re.sub(r'//.*?(\n|$)', '\n', code)
+        return code
 
     
 class BinaryOp(Node):
