@@ -176,14 +176,17 @@ class Parser:
         
         raise ValueError("Expected INT, '+', '-', '(', or operator")
         
-    
-    def run(self, code):
+    @staticmethod
+    def run(code):
         code = PreProcess().filter(code)
-        Parser.tokenizer = Tokenizer(code)
-        Parser.tokenizer.selectNext()
-        result = self.parseExpression()
-        if Parser.tokenizer.next.type != "EOF":
-            raise ValueError("Unexpected token: " + Parser.tokenizer.next.value)    
+        tokenizer = Tokenizer(code)
+        parser = Parser(tokenizer)
+
+        result = parser.parseExpression()
+
+        if parser.current.type != 'EOF':
+            raise Exception(f'Invalid expression, stopped at {parser.current.value} of type {parser.current.type}')
+
         return result
 
 def main():
