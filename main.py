@@ -1,4 +1,5 @@
 import sys
+from abc import ABC, abstractmethod
 
 class Token:
     def __init__(self, value, type):
@@ -6,28 +7,22 @@ class Token:
         self.type = type
 
 class Node:
-    def __init__(self, value, children=None):
+    def __init__(self, value, children):
         self.value = value
-        self.children = children if children is not None else []
+        self.children = children
 
+    @abstractmethod
     def evaluate(self, sym_table):
         pass
 
 class PrePro:
-    @staticmethod
     def filter(code):
-        i = 0
-        filtered_code = ""
-        
-        while i < len(code):
-            if i < len(code) - 1 and code[i] == '/' and code[i + 1] == '/':
-                while i < len(code) and code[i] != '\n':
-                    i += 1
-            else:
-                filtered_code += code[i]
-                i += 1
-        
-        return filtered_code
+        code = code.split("\n")
+        for i in range(len(code)):
+            if "//" in code[i]:
+                code[i] = code[i].split("//")[0]
+        code = "\n".join(code)
+        return code
 
 class BinOp(Node):
     def evaluate(self, sym_table):
@@ -62,7 +57,7 @@ class BinOp(Node):
 class UnOp(Node):
     def evaluate(self, sym_table):
         if self.value == '+':
-            return self.children[0].evaluate(sym_table)
+            return +self.children[0].evaluate(sym_table)
         elif self.value == '-':
             return -self.children[0].evaluate(sym_table)
         elif self.value == '!':
@@ -71,35 +66,28 @@ class UnOp(Node):
             raise Exception('Invalid operator')
 
 class IntVal(Node):
-    def __init__(self, value):
-        super().__init__(value)
-
     def evaluate(self, sym_table):
-        return int(self.value)
+        return self.value
 
 class NoOp(Node):
     def evaluate(self, sym_table):
         pass
 
 class SymbolTable:
-    def __init__(self):
-        self.symbols = {}
+    symbol_table = {}
 
     def set(self, identifier, value):
-        self.symbols[identifier] = value
+        self.symbol_table[identifier] = value
 
     def get(self, identifier):
-        if identifier in self.symbols:
-            return self.symbols[identifier]
+        if identifier in self.symbol_table:
+            return self.symbol_table[identifier]
         else:
             raise Exception(f"'{identifier}' not found in the symbol table")
 
 class Assignment(Node):
     def evaluate(self, sym_table):
-        identifier = self.value
-        value = self.children[0].evaluate(sym_table)
-        sym_table.set(identifier, value)
-        return value
+        return sym_table.set(self.children[0].value, self.children[1].evaluate(sym_table))
 
 class Identifier(Node):
     def evaluate(self, sym_table):
@@ -107,12 +95,15 @@ class Identifier(Node):
 
 class Block(Node):
     def evaluate(self, sym_table):
-        last_result = None
         for child in self.children:
-            last_result = child.evaluate(sym_table)
-        return last_result
+            child.evaluate(sym_table)
 
-class Print(Node):
+class Program(Node):
+    def evaluate(self, sym_table):
+        for child in self.children:
+            child.evaluate(sym_table)
+
+class PrintLn(Node):
     def evaluate(self, sym_table):
         val = self.children[0].evaluate(sym_table)
         print(val)
@@ -123,352 +114,347 @@ class ScanLn(Node):
 
 class If(Node):
     def evaluate(self, sym_table):
-        if len(self.children) == 3:
-            if self.children[0].evaluate(sym_table):
-                return self.children[1].evaluate(sym_table)
-            else:
-                return self.children[2].evaluate(sym_table)
-        else:
-            if self.children[0].evaluate(sym_table):
-                return self.children[1].evaluate(sym_table)
+        if self.children[0].evaluate(sym_table):
+            self.children[1].evaluate(sym_table)
+        elif len(self.children) == 3:
+            self.children[2].evaluate(sym_table)
         
 class For(Node):
     def evaluate(self, sym_table):
         self.children[0].evaluate(sym_table)
         while self.children[1].evaluate(sym_table):
-            self.children[2].evaluate(sym_table)
             self.children[3].evaluate(sym_table)
+            self.children[2].evaluate(sym_table)
 
 class Tokenizer:
-    def __init__(self, source):
+
+    specialWords = ['Println', 'ScanLn', 'if', 'for', 'else']
+
+    def __init__(self, source: str):
         self.source = source
         self.position = 0
         self.next = None
-        self.selectNext()
 
     def selectNext(self):
-        while self.position < len(self.source) and self.source[self.position].isspace():
-            self.position += 1
-
-        if self.position >= len(self.source):
-            self.next = Token(None, 'EOF')
-            return
-
-        char = self.source[self.position]
-        self.position += 1
-
-        if char in ['+', '-', '*', '/', '>', '<', '!']:
-            self.next = Token(char, 'OPERATOR')
-        elif char in ['(', ')']:
-            self.next = Token(char, 'PARENTHESIS')
-        elif char in ['{', '}']:
-            self.next = Token(char, 'BRACE')
-        elif char == '\n':
-            self.next = Token(char, 'BREAKLINE')
-        elif char == ';':
-            self.next = Token(char, 'SEMICOLON')
-        elif char == '=':
-            if self.next == '=':
-                self.position += 1
-                self.next = Token('==', 'OPERATOR')
-            else:
-                self.next = Token(char, 'EQUALS')
-        elif char == '&':
-            if self.next == '&':
-                self.position += 1
-                self.next = Token('&&', 'OPERATOR')
-            else:
-                raise Exception(f"Unexpected character {char}")
-        elif char == '|':
-            if self.next == '|':
-                self.position += 1
-                self.next = Token('||', 'OPERATOR')
-            else:
-                raise Exception(f"Unexpected character {char}")
-        elif char.isdigit():
-            number = ''
-            while char.isdigit():
-                number += char
-                if self.position >= len(self.source):
-                    break
-                char = self.source[self.position]
-                if char.isdigit():
+        blank = True
+        while blank:
+            blank = False
+            if self.position == len(self.source):
+                self.next = Token("", "EOF")
+            elif self.position != len(self.source):
+                if self.source[self.position].isdigit():
+                    number = ""
+                    while self.position < len(self.source) and self.source[self.position].isdigit():
+                        number += self.source[self.position]
+                        self.position += 1
+                    self.next = Token(int(number), "NUMBER")
+                elif self.source[self.position] == "+":
+                    self.next = Token(self.source[self.position], "PLUS")
                     self.position += 1
-                elif char.isspace() or char in ['+', '-', '*', '/', '(', ')','{', '}'] or char.isalpha() or char == '_':
-                    break
-                else:
-                    raise Exception(f"Unexpected character 1 {char}")
-            self.next = Token(int(number), 'NUMBER')    
-        elif char.isalpha():
-            identifier = ''
-            while char.isalnum() or char == '_':
-                identifier += char
-                if self.position >= len(self.source):
-                    break
-                char = self.source[self.position]
-                if char.isalnum() or char == '_':
+                elif self.source[self.position] == "-":
+                    self.next = Token(self.source[self.position], "MINUS")
+                    self.position += 1
+                elif self.source[self.position] == "*":
+                    self.next = Token(self.source[self.position], "MULTIPLY")
+                    self.position += 1
+                elif self.source[self.position] == "/":
+                    self.next = Token(self.source[self.position], "DIVIDE")
+                    self.position += 1
+                elif self.source[self.position] == "(":
+                    self.next = Token(self.source[self.position], "OPEN_PAR")
+                    self.position += 1                
+                elif self.source[self.position] == ")":
+                    self.next = Token(self.source[self.position], "CLOSE_PAR")
+                    self.position += 1
+                elif self.source[self.position] == "=":
+                    if self.source[self.position+1] == "=":
+                        self.next = Token("==", "EQUALS")
+                        self.position += 2
+                    else:
+                        self.next = Token(self.source[self.position], "ASSIGN")
+                        self.position += 1
+                elif self.source[self.position] == "\n":
+                    self.next = Token(self.source[self.position], "BREAKLINE")
+                    self.position += 1
+                elif self.source[self.position] == "|":
+                    if self.source[self.position+1] == "|":  
+                        self.next = Token("||", "OR")
+                        self.position += 2
+                    else:
+                        raise TypeError("Erro")
+                elif self.source[self.position] == "&":
+                    if self.source[self.position+1] == "&":  
+                        self.next = Token("AND", "&&")
+                        self.position += 2
+                    else:
+                        raise TypeError("Erro")
+                elif self.source[self.position] == ">":
+                    self.next = Token(self.source[self.position], "GREATER")
+                    self.position += 1                
+                elif self.source[self.position] == "<":
+                    self.next = Token(self.source[self.position], "LESS")
+                    self.position += 1                
+                elif self.source[self.position] == "!":
+                    self.next = Token(self.source[self.position], "NOT")
+                    self.position += 1
+                elif self.source[self.position] == "{":
+                    self.next = Token(self.source[self.position], "OPEN_BRACE")
+                    self.position += 1
+                elif self.source[self.position] == "}":
+                    self.next = Token(self.source[self.position], "CLOSE_BRACE")
+                    self.position += 1
+                elif self.source[self.position] == ";":
+                    self.next = Token(self.source[self.position], "SEMICOLON")
+                    self.position += 1
+                elif self.source[self.position].isalpha():
+                    identifier = ""
+                    while self.position < len(self.source) and (self.source[self.position].isalnum() or self.source[self.position] == "_"):
+                        identifier += self.source[self.position]
+                        self.position += 1
+                    if identifier in Tokenizer.specialWords:
+                        if identifier == "Println":    
+                            self.next = Token(identifier, "PRINTLN")
+                        elif identifier == "if":
+                            self.next = Token(identifier, "IF")
+                        elif identifier == "else":
+                            self.next = Token(identifier, "ELSE")
+                        elif identifier == "for":
+                            self.next = Token(identifier, "FOR")
+                        elif identifier == "Scanln":
+                            self.next = Token(identifier, "SCANLN")
+                    else:
+                        self.next = Token(identifier, "IDENTIFIER")
+                elif self.source[self.position].isspace(): 
+                    blank = True
                     self.position += 1
                 else:
-                    break
-            if identifier == 'Println':
-                self.next = Token(identifier, 'PRINTLN')
-            if identifier == 'ScanLn':
-                self.next = Token(identifier, 'SCANLN')
-            if identifier == 'if':
-                self.next = Token(identifier, 'IF')
-            if identifier == 'for':
-                self.next = Token(identifier, 'FOR')
-            if identifier == 'else':
-                self.next = Token(identifier, 'ELSE')
+                    raise TypeError("Erro")
             else:
-                self.next = Token(identifier, 'IDENTIFIER')
-        else:
-            raise Exception(f"Unexpected character 2 {char}")
+                raise ValueError("Erro")
 
 class Parser:
-
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-        self.current = self.tokenizer.next
-
-    def parseFactor(self):
-        if self.current.type == "OPERATOR" and self.current.value in ['+', '-', '!']:
-            unary_operator = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            return UnOp(unary_operator, [self.parseFactor()])
-        elif self.current.type == 'NUMBER':
-            value = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            return IntVal(value)
-        elif self.current.type == "PARENTHESIS" and self.current.value == '(':
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            node = self.parseExpression()
-            if self.current.type == "PARENTHESIS" and self.current.value == ')':
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                return node
-            else:
-                raise Exception('Expected closing parenthesis')
-        elif self.current.type == "IDENTIFIER":
-            node = Identifier(self.current.value)
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            return node
-        raise Exception('Invalid factor')
-
-    def parseTerm(self):
-        result = self.parseFactor()
-        while self.current.type == 'OPERATOR' and self.current.value in ['*', '/']:
-            operator = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            result = BinOp(operator, [result, self.parseFactor()])
-        return result
-
-    def parseExpression(self):
-        result = self.parseTerm()
-        while self.current.type == 'OPERATOR' and self.current.value in ['+', '-']:
-            operator = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            result = BinOp(operator, [result, self.parseTerm()])
-        return result
-
-    def parseStatement(self):
-        if self.current.type == "IDENTIFIER":
-            var_name = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            if self.current.value == "=":
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expr = self.parseExpression()
-                return Assignment(var_name, [expr])
-            else:
-                raise Exception(f"Unexpected token after identifier: {self.current.value}")
-        if self.current.value == "Println":
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            if self.current.type == "PARENTHESIS" and self.current.value == "(":
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expr = self.parseExpression()
-                if self.current.type == "PARENTHESIS" and self.current.value == ")":
-                    self.tokenizer.selectNext()
-                    self.current = self.tokenizer.next
-                    return Print(None, [expr])
-                else:
-                    raise Exception("Expected closing parenthesis after Println")
-            else:
-                raise Exception("Expected opening parenthesis after Println")
-        if self.current.value == "ScanLn":
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            if self.current.type == "PARENTHESIS" and self.current.value == "(":
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                if self.current.type == "PARENTHESIS" and self.current.value == ")":
-                    self.tokenizer.selectNext()
-                    self.current = self.tokenizer.next
-                    return ScanLn(None)
-                else:
-                    raise Exception("Expected closing parenthesis after ScanLn")
-            else:
-                raise Exception("Expected opening parenthesis after ScanLn")
-        if self.current.type == "NUMBER":
-            raise Exception("Invalid statement 1")
-        else:
-            return self.parseExpression()
+    
+    tokenizer = None
         
-    def parseBlock(self):
-        children = []
-        if self.current.type == 'BRACE' and self.current.value == '{':
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            if self.current.type == 'BREAKLINE':
-                while self.current.type != 'BRACE' and self.current.value != '}':
-                    self.tokenizer.selectNext()
-                    self.current = self.tokenizer.next
-                    statement = self.parseStatement()
-                    children.append(statement)
-        return Block(None, children)
-    
-    def parseRelExpression(self):
-        expression = self.parseExpression()
-        while self.current.value in ['==', '>', '<']:
-            if self.current.value == '==':
-                operator = self.current.value
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expression = BinOp(operator, [expression, self.parseExpression()])
-            if self.current.value == '>':
-                operator = self.current.value
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expression = BinOp(operator, [expression, self.parseExpression()])
-            if self.current.value == '<':
-                operator = self.current.value
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expression = BinOp(operator, [expression, self.parseExpression()])
-        return expression
-    
-    def parseBoolTerm(self):
-        expression = self.parseRelExpression()
-        while self.current.value == '&&':
-            operator = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            expression = BinOp(operator, [expression, self.parseRelExpression()])
-        return expression
-    
-    def parseBoolExpression(self):
-        expression = self.parseBoolTerm()
-        while self.current.value == '||':
-            operator = self.current.value
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            expression = BinOp(operator, [expression, self.parseBoolTerm()])
-        return expression
-    
-    def parseAssignment(self):
-        if self.current.type == 'IDENTIFIER':
-            identifier = self.current.value
-            node = Identifier(identifier)
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            if self.current.type == 'EQUALS':
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expression = self.parseBoolExpression()
-                return Assignment(node, [expression])
-            else:
-                raise Exception('Expected equals sign')
-        else:
-            raise Exception('Expected identifier')
-    
-    def parseStatement(self):
-        node = None
-        if self.current.value == 'Println':
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            if self.current.type == 'PARENTHESIS' and self.current.value == '(':
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expression = self.parseBoolExpression()
-                if self.current.type == 'PARENTHESIS' and self.current.value == ')':
-                    self.tokenizer.selectNext()
-                    self.current = self.tokenizer.next
-                    node = Print(None, [expression])
-                else:
-                    raise Exception('Expected closing parenthesis')
-            else:
-                raise Exception('Expected opening parenthesis')
-        if self.current.value == 'if':
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            expression = self.parseBoolExpression()
-            block = self.parseBlock()
-            if self.current.value == 'else':
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                else_block = self.parseBlock()
-                node = If(None, [expression, block, else_block])    
-        if self.current.value == 'for':
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            expression = self.parseAssignment()
-            if self.current.value == ';':
-                self.tokenizer.selectNext()
-                self.current = self.tokenizer.next
-                expression2 = self.parseBoolExpression()
-                if self.current.value == ';':
-                    self.tokenizer.selectNext()
-                    self.current = self.tokenizer.next
-                    expression3 = self.parseAssignment()
-                    block = self.parseBlock()
-                    node = For(None, [expression, expression2, expression3, block])
-                else:
-                    raise Exception('Expected semicolon')      
-        else:
-            node = self.parseAssignment()
-        if self.current.type == 'BREAKLINE':
-            self.tokenizer.selectNext()
-            self.current = self.tokenizer.next
-            return node
-    def parseProgram(self):
-        children = []
-        while self.current.type != 'EOF':
-            statement = self.parseStatement()
-            children.append(statement)
-        return Block(None, children)
+    def parseFactor():
+        resultado = None
+        if Parser.tokenizer.next.type == "NUMBER":
+            resultado = IntVal(Parser.tokenizer.next.value, [])
+            Parser.tokenizer.selectNext()
+            return resultado
         
+        elif Parser.tokenizer.next.type == "IDENTIFIER":
+            resultado = Identifier(Parser.tokenizer.next.value, [])
+            Parser.tokenizer.selectNext()
+            return resultado
+        
+        elif Parser.tokenizer.next.type == "PLUS":
+            Parser.tokenizer.selectNext()
+            resultado = UnOp("+", [Parser.parseFactor()])
+            return resultado
+        
+        elif Parser.tokenizer.next.type == "MINUS":
+            Parser.tokenizer.selectNext()
+            resultado = UnOp("-", [Parser.parseFactor()])
+            return resultado
+        
+        elif Parser.tokenizer.next.type == "NOT":
+            Parser.tokenizer.selectNext()
+            resultado = UnOp("!", [Parser.parseFactor()])
+            return resultado
+        
+        elif Parser.tokenizer.next.type == "OPEN_PAR":
+            Parser.tokenizer.selectNext()
+            resultado = Parser.parseBoolExpression()
+            if Parser.tokenizer.next.type == "CLOSE_PAR":
+                Parser.tokenizer.selectNext()
+                return resultado
+            else:
+                raise TypeError("Erro")
+        
+        elif Parser.tokenizer.next.type == "SCANLN":
+            Parser.tokenizer.selectNext()
+            if Parser.tokenizer.next.type == "OPEN_PAR":
+                Parser.tokenizer.selectNext()
+                resultado = ScanLn("Scanln", [])
+                if Parser.tokenizer.next.type == "CLOSE_PAR":
+                    Parser.tokenizer.selectNext()
+                    return resultado
+                else:
+                    raise TypeError("Erro")           
+            else:
+                raise TypeError("Erro")
+        
+        else:
+            raise TypeError("Erro")
+    
+    def parseTerm():
+        result = Parser.parseFactor()
+        while Parser.tokenizer.next.type == "MULTIPLY" or Parser.tokenizer.next.type == "DIVIDE":
+            if Parser.tokenizer.next.type == "MULTIPLY":
+                Parser.tokenizer.selectNext()
+                result = BinOp(None, [result, Parser.parseFactor()])
+            elif Parser.tokenizer.next.type == "DIVIDE":
+                Parser.tokenizer.selectNext()
+                result = BinOp(None, [result, Parser.parseFactor()])
+        return result
+    
+    def parseExpression():
+        result = Parser.parseTerm()
+        while Parser.tokenizer.next.type == "PLUS" or Parser.tokenizer.next.type == "MINUS":
+            if Parser.tokenizer.next.type == "PLUS":
+                Parser.tokenizer.selectNext()
+                result = BinOp(None, [result, Parser.parseTerm()])
+            elif Parser.tokenizer.next.type == "MINUS":
+                Parser.tokenizer.selectNext()
+                result = BinOp(None, [result, Parser.parseTerm()])  
+        return result
+        
+    def parseStatement():
+        resultado = None
+        if Parser.tokenizer.next.type == "BREAKLINE":
+            Parser.tokenizer.selectNext()
+            return NoOp(None, [])
+        elif Parser.tokenizer.next.type == "IDENTIFIER":
+            identificador = Identifier(Parser.tokenizer.next.value, [])
+            Parser.tokenizer.selectNext()
+            if Parser.tokenizer.next.type == "ASSIGN":
+                Parser.tokenizer.selectNext()
+                resultado = Assignment("=", [identificador, Parser.parseBoolExpression()])
+                if Parser.tokenizer.next.type == "BREAKLINE":
+                    Parser.tokenizer.selectNext()
+                    return resultado
+                else:
+                    raise TypeError("Erro")
+            else:
+                raise TypeError("Erro")
+        elif Parser.tokenizer.next.type == "PRINTLN":
+            Parser.tokenizer.selectNext()
+            if Parser.tokenizer.next.type == "OPEN_PAR":
+                Parser.tokenizer.selectNext()
+                resultado = PrintLn("PrintLn", [Parser.parseBoolExpression()])
+                if Parser.tokenizer.next.type == "CLOSE_PAR":
+                    Parser.tokenizer.selectNext()
+                    if Parser.tokenizer.next.type == "BREAKLINE":
+                        Parser.tokenizer.selectNext()
+                        return resultado
+                    else:
+                        raise TypeError("Erro")
+                else:
+                    raise TypeError("Erro")
+            else:
+                raise TypeError("Erro")
+        elif Parser.tokenizer.next.type == "IF":
+            Parser.tokenizer.selectNext()
+            resultado = If("if", [Parser.parseBoolExpression()])
+            resultado.children.append(Parser.parseBlock())
+            if Parser.tokenizer.next.type == "ELSE":
+                Parser.tokenizer.selectNext()
+                resultado.children.append(Parser.parseBlock())
+            if Parser.tokenizer.next.type == "BREAKLINE":
+                Parser.tokenizer.select_next()
+                return resultado
+            else:
+                raise TypeError("Erro")
+        elif Parser.tokenizer.next.type == "FOR":
+            Parser.tokenizer.selectNext()
+            resultado = For("for", [Parser.parseAssignment()])
+            if Parser.tokenizer.next.type == "SEMICOLON":
+                Parser.tokenizer.selectNext()
+                resultado.children.append(Parser.parseBoolExpression())
+                if Parser.tokenizer.next.type == "SEMICOLON":
+                    Parser.tokenizer.selectNext()
+                    resultado.children.append(Parser.parseAssignment())
+                    resultado.children.append(Parser.parseBlock())
+                    if Parser.tokenizer.next.type == "BREAKLINE":
+                        Parser.tokenizer.selectNext()
+                        return resultado
+                    else:
+                        raise TypeError("Erro")
+                else:
+                    raise TypeError("Erro")
+            else:
+                raise TypeError("Erro")
+        else:
+            raise TypeError("Erro")
 
-    @staticmethod
+    def parseBlock():
+        result = Block("Block", [])
+        if Parser.tokenizer.next.type == "OPEN_BRACE":
+            Parser.tokenizer.selectNext()
+            if Parser.tokenizer.next.type == "BREAKLINE":
+                Parser.tokenizer.selectNext()
+                while Parser.tokenizer.next.type != "CLOSE_BRACE":
+                    result.children.append(Parser.parseStatement())
+                Parser.tokenizer.selectNext()
+                return result
+            else:
+                raise TypeError("Expected breakline")
+        else:
+            raise TypeError("Expected opening brace")
+    
+    def parseRelExpression():
+        expression = Parser.parseExpression()
+
+        while Parser.tokenizer.next.type == "EQUALS" or Parser.tokenizer.next.type == "GREATER" or Parser.tokenizer.next.type == "LESS":
+            if Parser.tokenizer.next.type == "EQUALS":
+                Parser.tokenizer.selectNext()
+                return BinOp("==", [expression, Parser.parseExpression()])
+            elif Parser.tokenizer.next.type == "GREATER":
+                Parser.tokenizer.selectNext()
+                return BinOp(">", [expression, Parser.parseExpression()])
+            elif Parser.tokenizer.next.type == "LESS":
+                Parser.tokenizer.selectNext()
+                return BinOp("<", [expression, Parser.parseExpression()])
+        
+        return expression
+
+    def parseBoolTerm():
+        expression = Parser.parseRelExpression()
+        while Parser.tokenizer.next.type == "AND":
+            Parser.tokenizer.selectNext()
+            expression = BinOp("&&", [expression, Parser.parseRelExpression()])
+        return expression   
+    
+    def parseBoolExpression():
+        expression = Parser.parseBoolTerm()
+        while Parser.tokenizer.next.type == "OR":
+            Parser.tokenizer.selectNext()
+            expression = BinOp("||", [expression, Parser.parseBoolTerm()])
+        return expression
+
+    def parseAssignment():
+        if Parser.tokenizer.next.type == "IDENTIFIER":
+            identifier = Identifier(Parser.tokenizer.next.value, [])
+            Parser.tokenizer.selectNext()
+            if Parser.tokenizer.next.type == "EQUAL":
+                Parser.tokenizer.selectNext()
+                result = Assignment("=", [identifier, Parser.parseBoolExpression()])
+                return result
+            else:
+                raise TypeError("Erro")
+        else:
+            raise TypeError("Erro") 
+        
+    def parseProgram():
+        result = Program("", [])
+        while Parser.tokenizer.next.type != 'EOF':
+            result.children.append(Parser.parseStatement())
+        return result
+        
     def run(code):
-        code = PrePro().filter(code)
-        tokenizer = Tokenizer(code)
-        parser = Parser(tokenizer)
-        result = parser.parseBlock()
-        if parser.current.type != 'EOF':
-            raise Exception(f'Invalid expression, stopped at {parser.current.value} of type {parser.current.type}')
-        return result
-
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: python script_name.py '<expression>'", file=sys.stderr)
-        return
-    try:
-        with open(sys.argv[1], "r") as myfile:
-            data = myfile.read()
-        ast_root = Parser.run(data)
-        sym_table = SymbolTable()
-        ast_root.evaluate(sym_table)
-    except Exception as e:
-        print(str(e), file=sys.stderr)
+        Parser.tokenizer = Tokenizer(code)
+        Parser.tokenizer.selectNext()
+        result = Parser.parseProgram()
+        if Parser.tokenizer.next.type == "EOF":
+            return result
+        else:
+            raise TypeError("Erro")
 
 if __name__ == "__main__":
-    main()
+    with open(sys.argv[1], "r") as file:
+        code = file.read()
+        code = PrePro.filter(code)
+    symbol_table = SymbolTable()
+    run = Parser.run(code)
+    run.evaluate(symbol_table)
