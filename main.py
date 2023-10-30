@@ -353,10 +353,10 @@ class Parser:
         while Parser.tokenizer.next.type == "MULTIPLY" or Parser.tokenizer.next.type == "DIVIDE":
             if Parser.tokenizer.next.type == "MULTIPLY":
                 Parser.tokenizer.selectNext()
-                result = BinOp(None, [result, Parser.parseFactor()])
+                result = BinOp("*", [result, Parser.parseFactor()])
             elif Parser.tokenizer.next.type == "DIVIDE":
                 Parser.tokenizer.selectNext()
-                result = BinOp(None, [result, Parser.parseFactor()])
+                result = BinOp("/", [result, Parser.parseFactor()])
         return result
     
     def parseExpression():
@@ -364,13 +364,13 @@ class Parser:
         while Parser.tokenizer.next.type == "PLUS" or Parser.tokenizer.next.type == "MINUS" or Parser.tokenizer.next.type == "CONCAT":
             if Parser.tokenizer.next.type == "PLUS":
                 Parser.tokenizer.selectNext()
-                result = BinOp(None, [result, Parser.parseTerm()])
+                result = BinOp("+", [result, Parser.parseTerm()])
             elif Parser.tokenizer.next.type == "MINUS":
                 Parser.tokenizer.selectNext()
-                result = BinOp(None, [result, Parser.parseTerm()])
+                result = BinOp("-", [result, Parser.parseTerm()])
             elif Parser.tokenizer.next.type == "CONCAT":
                 Parser.tokenizer.selectNext()
-                result = BinOp(None, [result, Parser.parseTerm()])  
+                result = BinOp(".", [result, Parser.parseTerm()])  
         return result
         
     def parseStatement():
