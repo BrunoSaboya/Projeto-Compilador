@@ -44,7 +44,7 @@ class BinOp(Node):
         elif self.value == '<':
             result = int(left < right)
         elif self.value == '==':
-            result = int(left == right)
+            result = int(left == right) 
         elif self.value == '&&':
             result = left and right
         elif self.value == '!':
