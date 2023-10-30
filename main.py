@@ -192,6 +192,7 @@ class Tokenizer:
                     self.position += 1
                 elif self.source[self.position] == ".":
                     self.next = Token(self.source[self.position], "CONCAT")
+                    self.position += 1
                 elif self.source[self.position] == '"':
                     identifier = self.source[self.position]
                     self.position += 1
@@ -270,7 +271,7 @@ class Tokenizer:
                         elif identifier == "int":
                             self.next = Token(identifier, "TYPE")
                         elif identifier == "string":
-                            self.next = Token(identifier, "STRING")
+                            self.next = Token(identifier, "TYPE")
                     else:
                         self.next = Token(identifier, "IDENTIFIER")
                 elif self.source[self.position].isspace(): 
@@ -280,7 +281,7 @@ class Tokenizer:
                     raise TypeError("Erro")
             else:
                 raise ValueError("Erro")
-            
+
 class Parser:
     
     tokenizer = None
@@ -415,7 +416,7 @@ class Parser:
                 Parser.tokenizer.selectNext()
                 resultado.children.append(Parser.parseBlock())
             if Parser.tokenizer.next.type == "BREAKLINE":
-                Parser.tokenizer.select_next()
+                Parser.tokenizer.selectNext()
                 return resultado
             else:
                 raise TypeError("Erro")
@@ -497,7 +498,7 @@ class Parser:
 
     def parseBoolTerm():
         expression = Parser.parseRelExpression()
-        while Parser.tokenizer.next.type == "AND":
+        while Parser.tokenizer.next.value == "AND":
             Parser.tokenizer.selectNext()
             expression = BinOp("&&", [expression, Parser.parseRelExpression()])
         return expression   
@@ -513,7 +514,7 @@ class Parser:
         if Parser.tokenizer.next.type == "IDENTIFIER":
             identifier = Identifier(Parser.tokenizer.next.value, [])
             Parser.tokenizer.selectNext()
-            if Parser.tokenizer.next.type == "EQUAL":
+            if Parser.tokenizer.next.type == "ASSIGN":
                 Parser.tokenizer.selectNext()
                 result = Assignment("=", [identifier, Parser.parseBoolExpression()])
                 return result
