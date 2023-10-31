@@ -30,66 +30,74 @@ class BinOp(Node):
     def evaluate(self, sym_table):
         left = self.children[0].evaluate(sym_table)
         right = self.children[1].evaluate(sym_table)
+        # print(left, right)
 
         if self.value == '+':
-            result = left + right
+            if left[1] != right[1] or left[1] != 'int':
+                raise SyntaxError("Erro de BinOp +")
+            return (self.children[0].evaluate(sym_table)[0] + self.children[1].evaluate(sym_table)[0], "int")
         elif self.value == '-':
-            result = left - right
+            if left[1] != right[1] or left[1] != 'int':
+                raise SyntaxError("Erro de BinOp -")
+            return (self.children[0].evaluate(sym_table)[0] - self.children[1].evaluate(sym_table)[0], "int")
         elif self.value == '*':
-            result = left * right
+            if left[1] != right[1] or left[1] != 'int':
+                raise SyntaxError("Erro de BinOp *")
+            return (self.children[0].evaluate(sym_table)[0] * self.children[1].evaluate(sym_table)[0], "int")
         elif self.value == '/':
-            result = left // right
-        elif self.value == '>':
-            result = int(left > right)
-        elif self.value == '<':
-            result = int(left < right)
+            if left[1] != right[1] or left[1] != 'int':
+                raise SyntaxError("Erro de BinOp /")
+            return (self.children[0].evaluate(sym_table)[0] // self.children[1].evaluate(sym_table)[0], "int")
         elif self.value == '==':
-            result = int(left == right) 
+            if left[1] != right[1]:
+                raise SyntaxError("Erro de BinOp ==")
+            return (int(self.children[0].evaluate(sym_table)[0] == self.children[1].evaluate(sym_table)[0]), "int")
         elif self.value == '&&':
-            result = left and right
-        elif self.value == '!':
-            result = not right
+            if left[1] != right[1] or left[1] != 'int':
+                raise SyntaxError("Erro de BinOp &&")
+            return (int(self.children[0].evaluate(sym_table)[0] and self.children[1].evaluate(sym_table)[0]), "int")
         elif self.value == '||':
-            result = left or right
+            if left[1] != right[1] or left[1] != 'int':
+                raise SyntaxError("Erro de BinOp ||")
+            return (int(self.children[0].evaluate(sym_table)[0] or self.children[1].evaluate(sym_table)[0]), "int")
+        elif self.value == '>':
+            return (int(self.children[0].evaluate(sym_table)[0] > self.children[1].evaluate(sym_table)[0]), "int")
+        elif self.value == '<':
+            return (int(self.children[0].evaluate(sym_table)[0] < self.children[1].evaluate(sym_table)[0]), "int")
         elif self.value == '.':
-            result = str(left) + str(right)
-        else:
-            raise Exception('Invalid operator')
-
-        return result
-
+            return (str(self.children[0].evaluate(sym_table)[0]) + str(self.children[1].evaluate(sym_table)[0]), "string")
+        
 class UnOp(Node):
     def evaluate(self, sym_table):
         if self.value == '+':
-            return +self.children[0].evaluate(sym_table)
+            return (self.children[0].evaluate(sym_table)[0], 'int')
         elif self.value == '-':
-            return -self.children[0].evaluate(sym_table)
+            return (-self.children[0].evaluate(sym_table)[0], 'int')
         elif self.value == '!':
-            return not self.children[0].evaluate(sym_table)
-        else:
-            raise Exception('Invalid operator')
+            return (not self.children[0].evaluate(sym_table)[0], 'int')
 
 class SymbolTable:
-    symbol_table = {}
+    def __init__(self):
+        self.symbol_table = {}
 
     def set(self, identifier, value):
+        if value[1] != self.symbol_table[identifier][1]:
+            raise SyntaxError("Erro de tipos") 
         self.symbol_table[identifier] = value
 
     def get(self, identifier):
-        if identifier in self.symbol_table:
-            return self.symbol_table[identifier]
-        else:
-            raise Exception(f"'{identifier}' not found in the symbol table")
+        # print(self.symbol_table)
+        return self.symbol_table[identifier]
         
     def assing(self, identifier, value):
-        if identifier in self.symbol_table:
-            raise Exception(f"'{identifier}' already exists in the symbol table")
+        if identifier in self.symbol_table.keys():
+            raise SyntaxError(f"'{identifier}' already exists in the symbol table")
         else:
             self.symbol_table[identifier] = value
 
 class IntVal(Node):
     def evaluate(self, sym_table):
-        return self.value
+        return (int(self.value), "int")
     
 class NoOp(Node):
     def evaluate(self, sym_table):
@@ -97,11 +105,13 @@ class NoOp(Node):
     
 class StringVal(Node):
     def evaluate(self, sym_table):
-        return self.value
+        return (self.value, "string")
 
 class Assignment(Node):
     def evaluate(self, sym_table):
-        return sym_table.set(self.children[0].value, self.children[1].evaluate(sym_table))
+        # print(self.children[1].evaluate(sym_table))
+        sym_table.set(self.children[0].value, self.children[1].evaluate(sym_table))
+        # print(sym_table.symbol_table)
 
 class Identifier(Node):
     def evaluate(self, sym_table):
@@ -119,12 +129,12 @@ class Program(Node):
 
 class PrintLn(Node):
     def evaluate(self, sym_table):
-        val = self.children[0].evaluate(sym_table)
-        print(val)
+        print(self.children[0].evaluate(sym_table)[0])
+        return 0
 
 class ScanLn(Node):
     def evaluate(self, sym_table):
-        return int(input())
+        return (int(input()), "int")
 
 class If(Node):
     def evaluate(self, sym_table):
@@ -136,19 +146,19 @@ class If(Node):
 class For(Node):
     def evaluate(self, sym_table):
         self.children[0].evaluate(sym_table)
-        while self.children[1].evaluate(sym_table):
+        while self.children[1].evaluate(sym_table)[0]:
             self.children[3].evaluate(sym_table)
             self.children[2].evaluate(sym_table)
 
 class VarDec(Node):
     def evaluate(self, sym_table):
-        if (len(self.children)) == 1:
+        if len(self.children) == 1:
             if self.value == 'int':
-                sym_table.assing(self.children[0].value, 0)
+                sym_table.assing(self.children[0].value, (0, self.value))
             elif self.value == 'string':
-                sym_table.assing(self.children[0].value, "")
+                sym_table.assing(self.children[0].value, ("", self.value))
         else:
-            sym_table.assing(self.children[0].value, self.children[1].evaluate(sym_table))
+            sym_table.assing(self.children[0].value, (self.children[1].evaluate(sym_table)[0], self.value))
 
 class Tokenizer:
 
@@ -445,11 +455,12 @@ class Parser:
                 identificador = Identifier(Parser.tokenizer.next.value, [])
                 Parser.tokenizer.selectNext()
                 if Parser.tokenizer.next.type == "TYPE":
-                    varDec = VarDec("var", [identificador])
+                    tipo = Parser.tokenizer.next.value
+                    varDec = VarDec(Parser.tokenizer.next.value, [identificador])
                     Parser.tokenizer.selectNext()
                     if Parser.tokenizer.next.type == "ASSIGN":
                         Parser.tokenizer.selectNext()
-                        resultado = VarDec("var", [identificador, Parser.parseBoolExpression()])
+                        resultado = VarDec(tipo, [identificador, Parser.parseBoolExpression()])
                         if Parser.tokenizer.next.type == "BREAKLINE":
                             Parser.tokenizer.selectNext()
                             return resultado
@@ -522,7 +533,6 @@ class Parser:
                 raise TypeError("Erro")
         else:
             raise TypeError("Erro") 
-        
         
     def run(code):
         Parser.tokenizer = Tokenizer(code)
