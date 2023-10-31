@@ -545,7 +545,7 @@ class Parser:
 
 if __name__ == "__main__":
     with open(sys.argv[1], "r") as file:
-        code = file.read()
+        code = file.read()+"\n"
         code = PrePro.filter(code)
     symbol_table = SymbolTable()
     run = Parser.run(code)
