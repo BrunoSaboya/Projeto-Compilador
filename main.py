@@ -1,6 +1,7 @@
 import sys
 import re
 from abc import ABC, abstractmethod
+from assembler import AssemblyGenerator
 
 class Token:
     def __init__(self, value, type):
@@ -17,55 +18,53 @@ class PrePro:
         return code
 
 class Node:
+
+    i = 0
+    
     def __init__(self, value, children):
         self.value = value
         self.children = children
+        self.id = self.newId()
 
     @abstractmethod
     def evaluate(self, sym_table):
         pass
 
+    @staticmethod
+    def newId():
+        Node.i += 1
+        return Node.i
+
 
 class BinOp(Node):
     def evaluate(self, sym_table):
-        left = self.children[0].evaluate(sym_table)
-        right = self.children[1].evaluate(sym_table)
-        # print(left, right)
+        self.children[1].evaluate(sym_table)
+        AssemblyGenerator.writeAsm("PUSH EAX")
+        self.children[0].evaluate(sym_table)
+        AssemblyGenerator.writeAsm("POP EBX")
 
         if self.value == '+':
-            if left[1] != right[1] or left[1] != 'int':
-                raise SyntaxError("Erro de BinOp +")
-            return (self.children[0].evaluate(sym_table)[0] + self.children[1].evaluate(sym_table)[0], "int")
+            AssemblyGenerator.writeAsm("ADD EAX, EBX")
         elif self.value == '-':
-            if left[1] != right[1] or left[1] != 'int':
-                raise SyntaxError("Erro de BinOp -")
-            return (self.children[0].evaluate(sym_table)[0] - self.children[1].evaluate(sym_table)[0], "int")
+            AssemblyGenerator.writeAsm("SUB EAX, EBX")
         elif self.value == '*':
-            if left[1] != right[1] or left[1] != 'int':
-                raise SyntaxError("Erro de BinOp *")
-            return (self.children[0].evaluate(sym_table)[0] * self.children[1].evaluate(sym_table)[0], "int")
+            AssemblyGenerator.writeAsm("IMUL EBX")
         elif self.value == '/':
-            if left[1] != right[1] or left[1] != 'int':
-                raise SyntaxError("Erro de BinOp /")
-            return (self.children[0].evaluate(sym_table)[0] // self.children[1].evaluate(sym_table)[0], "int")
+            AssemblyGenerator.writeAsm("IDIV EBX")
         elif self.value == '==':
-            if left[1] != right[1]:
-                raise SyntaxError("Erro de BinOp ==")
-            return (int(self.children[0].evaluate(sym_table)[0] == self.children[1].evaluate(sym_table)[0]), "int")
+            AssemblyGenerator.writeAsm("CMP EAX, EBX")
+            AssemblyGenerator.writeAsm("CALL binop_je")
         elif self.value == '&&':
-            if left[1] != right[1] or left[1] != 'int':
-                raise SyntaxError("Erro de BinOp &&")
-            return (int(self.children[0].evaluate(sym_table)[0] and self.children[1].evaluate(sym_table)[0]), "int")
+            AssemblyGenerator.writeAsm("AND EAX, EBX")
         elif self.value == '||':
-            if left[1] != right[1] or left[1] != 'int':
-                raise SyntaxError("Erro de BinOp ||")
-            return (int(self.children[0].evaluate(sym_table)[0] or self.children[1].evaluate(sym_table)[0]), "int")
+            AssemblyGenerator.writeAsm("OR EAX, EBX")
         elif self.value == '>':
-            return (int(self.children[0].evaluate(sym_table)[0] > self.children[1].evaluate(sym_table)[0]), "int")
+            AssemblyGenerator.writeAsm("CMP EAX, EBX")
+            AssemblyGenerator.writeAsm("CALL binop_jg")
         elif self.value == '<':
-            return (int(self.children[0].evaluate(sym_table)[0] < self.children[1].evaluate(sym_table)[0]), "int")
-        elif self.value == '.':
-            return (str(self.children[0].evaluate(sym_table)[0]) + str(self.children[1].evaluate(sym_table)[0]), "string")
+            AssemblyGenerator.writeAsm("CMP EAX, EBX")
+            AssemblyGenerator.writeAsm("CALL binop_jl")
+
         
 class UnOp(Node):
     def evaluate(self, sym_table):
@@ -79,6 +78,7 @@ class UnOp(Node):
 class SymbolTable:
     def __init__(self):
         self.symbol_table = {}
+        self.stack_pointer = 0
 
     def set(self, identifier, value):
         if value[1] != self.symbol_table[identifier][1]:
@@ -86,17 +86,19 @@ class SymbolTable:
         self.symbol_table[identifier] = value
 
     def get(self, identifier):
-        # print(self.symbol_table)
         return self.symbol_table[identifier]
         
-    def assing(self, identifier, value):
+    def assing(self, identifier, value, type):
         if identifier in self.symbol_table.keys():
             raise SyntaxError(f"'{identifier}' already exists in the symbol table")
         else:
-            self.symbol_table[identifier] = value
+            self.stack_pointer += 4
+            self.symbol_table[identifier] = (value, type, self.stack_pointer)
 
 class IntVal(Node):
     def evaluate(self, sym_table):
+        asm = "MOV EAX, " + str(self.value)
+        AssemblyGenerator.writeAsm(asm)
         return (int(self.value), "int")
     
 class NoOp(Node):
@@ -109,13 +111,17 @@ class StringVal(Node):
 
 class Assignment(Node):
     def evaluate(self, sym_table):
-        # print(self.children[1].evaluate(sym_table))
-        sym_table.set(self.children[0].value, self.children[1].evaluate(sym_table))
-        # print(sym_table.symbol_table)
+        variable = self.children[0].value
+        self.children[1].evaluate(sym_table)
+        identifier = sym_table.get(variable)
+        sp = identifier[2]
+        AssemblyGenerator.writeAsm("MOV [EBP - " + str(sp) + "], EAX")
 
 class Identifier(Node):
     def evaluate(self, sym_table):
-        return sym_table.get(self.value)
+        identifier = sym_table.get(self.value)
+        sp = identifier[2]
+        AssemblyGenerator.writeAsm("MOV EAX, [EBP - " + str(sp) + "]")
 
 class Block(Node):
     def evaluate(self, sym_table):
@@ -129,36 +135,57 @@ class Program(Node):
 
 class PrintLn(Node):
     def evaluate(self, sym_table):
-        print(self.children[0].evaluate(sym_table)[0])
-        return 0
+        self.children[0].evaluate(sym_table)
+        AssemblyGenerator.writeAsm("PUSH EAX")
+        AssemblyGenerator.writeAsm("PUSH formatout")
+        AssemblyGenerator.writeAsm("CALL printf")
+        AssemblyGenerator.writeAsm("ADD ESP, 8")
 
 class ScanLn(Node):
     def evaluate(self, sym_table):
+        AssemblyGenerator.writeAsm("PUSH scanint")
+        AssemblyGenerator.writeAsm("PUSH formatin")
+        AssemblyGenerator.writeAsm("call scanf")
+        AssemblyGenerator.writeAsm("ADD ESP, 8")
+        AssemblyGenerator.writeAsm("MOV EAX, DWORD [scanint]")
         return (int(input()), "int")
 
 class If(Node):
     def evaluate(self, sym_table):
-        if self.children[0].evaluate(sym_table):
-            self.children[1].evaluate(sym_table)
-        elif len(self.children) == 3:
+        AssemblyGenerator.writeAsm("; inicio do loop if")
+        AssemblyGenerator.writeAsm("IF_" + str(self.id) + ":")
+        self.children[0].evaluate(sym_table)
+        AssemblyGenerator.writeAsm("CMP EAX, False")
+        if len(self.children) > 2:
+            AssemblyGenerator.writeAsm("; Inicio do ELSE")
+            AssemblyGenerator.writeAsm("ELSE_" + str(self.id))
             self.children[2].evaluate(sym_table)
+            AssemblyGenerator.writeAsm("JMP EXIT_" + str(self.id))
+            AssemblyGenerator.writeAsm("EXIT_" + str(self.id) + ":")
+        else:
+            AssemblyGenerator.writeAsm("; Inicio do IF")
+            AssemblyGenerator.writeAsm("JE EXIT_" + str(self.id))
+            self.children[1].evaluate(sym_table)
+            AssemblyGenerator.writeAsm("JMP EXIT_" + str(self.id))
+            AssemblyGenerator.writeAsm("EXIT_" + str(self.id) + ":")
         
 class For(Node):
     def evaluate(self, sym_table):
+        AssemblyGenerator.writeAsm("; Inicio do loop for")
         self.children[0].evaluate(sym_table)
-        while self.children[1].evaluate(sym_table)[0]:
-            self.children[3].evaluate(sym_table)
-            self.children[2].evaluate(sym_table)
+        AssemblyGenerator.writeAsm("LOOP_" + str(self.id) + ":")
+        self.children[1].evaluate(sym_table)
+        AssemblyGenerator.writeAsm("CMP EAX, False")
+        AssemblyGenerator.writeAsm("JE EXIT_" + str(self.id))
+        self.children[3].evaluate(sym_table)
+        self.children[2].evaluate(sym_table)
+        AssemblyGenerator.writeAsm("JMP LOOP_" + str(self.id))
+        AssemblyGenerator.writeAsm("EXIT_" + str(self.id) + ":")
 
 class VarDec(Node):
     def evaluate(self, sym_table):
-        if len(self.children) == 1:
-            if self.value == 'int':
-                sym_table.assing(self.children[0].value, (0, self.value))
-            elif self.value == 'string':
-                sym_table.assing(self.children[0].value, ("", self.value))
-        else:
-            sym_table.assing(self.children[0].value, (self.children[1].evaluate(sym_table)[0], self.value))
+        AssemblyGenerator.writeAsm("PUSH DWORD 0")
+        sym_table.assing(self.children[0].value, None, self.value)
 
 class Tokenizer:
 
@@ -548,5 +575,7 @@ if __name__ == "__main__":
         code = file.read()+"\n"
         code = PrePro.filter(code)
     symbol_table = SymbolTable()
+    AssemblyGenerator.writeStart()
     run = Parser.run(code)
     run.evaluate(symbol_table)
+    AssemblyGenerator.writeEnd()
