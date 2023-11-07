@@ -158,7 +158,7 @@ class If(Node):
         AssemblyGenerator.writeAsm("CMP EAX, False")
         if len(self.children) > 2:
             AssemblyGenerator.writeAsm("; Inicio do ELSE")
-            AssemblyGenerator.writeAsm("ELSE_" + str(self.id))
+            AssemblyGenerator.writeAsm("ELSE_" + str(self.id) + ":")
             self.children[2].evaluate(sym_table)
             AssemblyGenerator.writeAsm("JMP EXIT_" + str(self.id))
             AssemblyGenerator.writeAsm("EXIT_" + str(self.id) + ":")
