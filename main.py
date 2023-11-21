@@ -25,6 +25,9 @@ class Node:
     def evaluate(self, sym_table):
         pass
 
+    def __repr__(self):
+        return "<" + self.value + ",".join(self.children) + ">"
+
 
 class BinOp(Node):
     def evaluate(self, sym_table):
@@ -95,6 +98,18 @@ class SymbolTable:
         else:
             self.symbol_table[identifier] = value
 
+class FuncTable:
+    def __init__(self):
+        self.func_table = {}
+
+    def setfunc(self, identifier, value):
+        if value[1] != self.func_table[identifier][1]:
+            raise SyntaxError("Erro de tipos")
+        self.func_table[identifier] = value
+
+    def getfunc(self, identifier):
+        return self.func_table[identifier]
+
 class IntVal(Node):
     def evaluate(self, sym_table):
         return (int(self.value), "int")
@@ -109,9 +124,9 @@ class StringVal(Node):
 
 class Assignment(Node):
     def evaluate(self, sym_table):
-        # print(self.children[1].evaluate(sym_table))
+        
         sym_table.set(self.children[0].value, self.children[1].evaluate(sym_table))
-        # print(sym_table.symbol_table)
+        
 
 class Identifier(Node):
     def evaluate(self, sym_table):
@@ -160,9 +175,47 @@ class VarDec(Node):
         else:
             sym_table.assing(self.children[0].value, (self.children[1].evaluate(sym_table)[0], self.value))
 
+class ReturnFunc(Node):
+    def __init__(self, value, children):
+        self.value = value
+        self.children = children
+
+    def evaluate(self, sym_table):
+        return self.children[0].evaluate(sym_table)
+    
+class FuncDec(Node):
+    def __init__(self, value, children):
+        self.value = value
+        self.children = children
+
+    def evaluate(self, sym_table):
+        functionName = self.children[0].value
+        functionValue = self
+
+        if len(self.children) != 3:
+            raise Exception('Error in function declaration')
+        FuncTable.setfunc(functionName, (functionValue, self.value))
+
+class FuncCall(Node):
+    def __init__(self, value, children):
+        self.value = value
+        self.children = children
+
+    def evaluate(self, sym_table):
+        funcObj = FuncTable.getfunc(self.value)
+
+        if len(funcObj.children) != len(self.children)+2:
+            raise Exception('Error in function call')
+        localSymTable = SymbolTable()
+
+        for i in range(len(self.children)):
+            funcObj.children[i+1].evaluate(localSymTable)
+            localSymTable.set(funcObj.children[i+1].value, self.children[i].evaluate(localSymTable))
+        return self.children[-1].evaluate(localSymTable)
+
 class Tokenizer:
 
-    specialWords = ['Println', 'Scanln', 'if', 'for', 'else', 'var', 'int', 'string']
+    specialWords = ['Println', 'Scanln', 'if', 'for', 'else', 'var', 'int', 'string', 'func', 'return']
 
     def __init__(self, source: str):
         self.source = source
@@ -202,6 +255,9 @@ class Tokenizer:
                     self.position += 1
                 elif self.source[self.position] == ".":
                     self.next = Token(self.source[self.position], "CONCAT")
+                    self.position += 1
+                elif self.source[self.position] == ",":
+                    self.next = Token(self.source[self.position], "COMMA")
                     self.position += 1
                 elif self.source[self.position] == '"':
                     identifier = self.source[self.position]
@@ -282,6 +338,10 @@ class Tokenizer:
                             self.next = Token(identifier, "TYPE")
                         elif identifier == "string":
                             self.next = Token(identifier, "TYPE")
+                        elif identifier == "func":
+                            self.next = Token(identifier, "FUNC")
+                        elif identifier == "return":
+                            self.next = Token(identifier, "RETURN")
                     else:
                         self.next = Token(identifier, "IDENTIFIER")
                 elif self.source[self.position].isspace(): 
@@ -310,10 +370,28 @@ class Parser:
             return resultado
         
         elif Parser.tokenizer.next.type == "IDENTIFIER":
-            resultado = Identifier(Parser.tokenizer.next.value, [])
+            identifier = Identifier(Parser.tokenizer.next.value, [])
             Parser.tokenizer.selectNext()
-            return resultado
-        
+            if Parser.tokenizer.next.type == "OPEN_PAR":
+                Parser.tokenizer.selectNext()
+                if not Parser.tokenizer.next.type == "CLOSE_PAR":
+                    args = []
+                    args.append(Parser.parseBoolExpression())
+                    while Parser.tokenizer.next.type == "COMMA":
+                        Parser.tokenizer.selectNext()
+                        arg = Parser.parseBoolExpression()
+                        args.append(arg)
+                    if Parser.tokenizer.next.type == "CLOSE_PAR":
+                        Parser.tokenizer.selectNext()
+                        result = FuncCall(identifier.value, args)
+                        return result
+                    else:
+                        raise TypeError("Erro")
+                else:
+                    raise TypeError("Erro")
+            else:
+                return identifier
+                
         elif Parser.tokenizer.next.type == "STRING":
             resultado = StringVal(Parser.tokenizer.next.value, [])
             Parser.tokenizer.selectNext()
@@ -473,6 +551,14 @@ class Parser:
                     raise TypeError("Erro")
             else:
                 raise TypeError("Erro")
+        elif Parser.tokenizer.next.type == "RETURN":
+            Parser.tokenizer.selectNext()
+            resultado = ReturnFunc("return", [Parser.parseBoolExpression()])
+            if Parser.tokenizer.next.type == "BREAKLINE":
+                Parser.tokenizer.selectNext()
+                return resultado
+            else:
+                raise TypeError("Erro")
         else:
             raise TypeError("Erro")
 
@@ -525,7 +611,24 @@ class Parser:
         if Parser.tokenizer.next.type == "IDENTIFIER":
             identifier = Identifier(Parser.tokenizer.next.value, [])
             Parser.tokenizer.selectNext()
-            if Parser.tokenizer.next.type == "ASSIGN":
+            if Parser.tokenizer.next.type == "OPEN_PAR":
+                Parser.tokenizer.selectNext()
+                if not Parser.tokenizer.next.type == "CLOSE_PAR":
+                    args = []
+                    args.append(Parser.parseBoolExpression())
+                    while Parser.tokenizer.next.type == "COMMA":
+                        Parser.tokenizer.selectNext()
+                        arg = Parser.parseBoolExpression()
+                        args.append(arg)
+                    if Parser.tokenizer.next.type == "CLOSE_PAR":
+                        Parser.tokenizer.selectNext()
+                        result = FuncCall(identifier.value, args)
+                        return result
+                    else:
+                        raise TypeError("Erro")
+                else:
+                    raise TypeError("Erro")
+            elif Parser.tokenizer.next.type == "ASSIGN":
                 Parser.tokenizer.selectNext()
                 result = Assignment("=", [identifier, Parser.parseBoolExpression()])
                 return result
@@ -533,6 +636,54 @@ class Parser:
                 raise TypeError("Erro")
         else:
             raise TypeError("Erro") 
+        
+    def parseDeclaration():
+        if Parser.tokenizer.next.type == "FUNC":
+            Parser.tokenizer.selectNext()
+            if Parser.tokenizer.next.type == "IDENTIFIER":
+                funcName = Identifier(Parser.tokenizer.next.value, [])
+                Parser.tokenizer.selectNext()
+                if Parser.tokenizer.next.type == "OPEN_PAR":
+                    Parser.tokenizer.selectNext()
+                    args = []
+                    if Parser.tokenizer.next.type == "CLOSE_PAR":
+                        Parser.tokenizer.selectNext()
+                        if Parser.tokenizer.next.type == "TYPE":
+                            funcType = Parser.tokenizer.next.value
+                            block = Parser.parseBlock()
+                            Parser.tokenizer.selectNext()
+                            if Parser.tokenizer.next.type == "BREAKLINE":
+                                Parser.tokenizer.selectNext()
+                                return FuncDec(funcName.value, [VarDec(funcType, [funcName]) + args + [block]])
+                    elif Parser.tokenizer.next.type == "IDENTIFIER":
+                        parametro = Parser.tokenizer.next.value
+                        Parser.tokenizer.selectNext()
+                        if Parser.tokenizer.next.type == "TYPE":
+                            tipo = Parser.tokenizer.next.value
+                            args.append(VarDec(tipo, [Identifier(parametro, [])]))
+                            Parser.tokenizer.selectNext()
+                            while Parser.tokenizer.next.type == "COMMA":
+                                Parser.tokenizer.selectNext()
+                                if Parser.tokenizer.next.type == "IDENTIFIER":
+                                    parametro = Parser.tokenizer.next.value
+                                    Parser.tokenizer.selectNext()
+                                    if Parser.tokenizer.next.type == "TYPE":
+                                        tipo = Parser.tokenizer.next.value
+                                        args.append(VarDec(tipo, [Identifier(parametro, [])]))
+                                        Parser.tokenizer.selectNext()
+                                    else:
+                                        raise TypeError("Erro")
+                                else:
+                                    raise TypeError("Erro")
+                            if Parser.tokenizer.next.type == "CLOSE_PAR":
+                                Parser.tokenizer.selectNext()
+                                if Parser.tokenizer.next.type == "TYPE":
+                                    funcType = Parser.tokenizer.next.value
+                                    block = Parser.parseBlock()
+                                    Parser.tokenizer.selectNext()
+                                    if Parser.tokenizer.next.type == "BREAKLINE":
+                                        return FuncDec(funcName.value, [VarDec(funcType, [funcName]) + args + [block]])
+
         
     def run(code):
         Parser.tokenizer = Tokenizer(code)
