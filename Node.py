@@ -20,11 +20,11 @@ class SymbolTable:
         try:
             return self.symbol_table[identifier]
         except:
-            raise Exception(f"{identifier} variavel nn existe")
+            raise Exception(f"{identifier} n existe")
         
     def assing(self, identifier, type):
         if identifier in self.symbol_table.keys():
-            raise Exception("variavel ja exidte")
+            raise Exception("variavel ja existe")
         else:
             self.symbol_table[identifier] = (None,type)
     
