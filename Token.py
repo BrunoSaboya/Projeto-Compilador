@@ -1,4 +1,4 @@
 class Token:
-    def __init__(self, value: int, type: str):
-        self.value = value
+    def __init__(self, type: str, value: int):
         self.type = type
+        self.value = value

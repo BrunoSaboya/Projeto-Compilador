@@ -3,39 +3,40 @@ from Token import Token
 
 class SymbolTable:
     def __init__(self):
-        self.symbol_table = dict()
+        self.table = {}
 
-    def set(self, identifier, value):
-        if identifier not in self.symbol_table.keys():
-            raise Exception("n declarada")
-        else:
-            if (type(value[0]) == FuncDec):
-                self.symbol_table[identifier] = value 
-            elif (self.symbol_table[identifier][1] == value[1]):
-                self.symbol_table[identifier] = value                
-            else:
-                raise Exception("tipagem diferentes")
-            
-    def get(self, identifier):
-        try:
-            return self.symbol_table[identifier]
-        except:
-            raise Exception(f"{identifier} n existe")
+    def setter(self, key, value):
+        if value[1] != self.table[key][1]:
+            print(value)
+            raise SyntaxError("Tipo não combina: "+value[1]+"!="+self.table[key][1]) 
+        self.table[key] = value
         
-    def assing(self, identifier, type):
-        if identifier in self.symbol_table.keys():
-            raise Exception("variavel ja existe")
+    def getter(self, key):
+        return self.table[key]
+    
+    def create(self, key, value):
+        if key in self.table.keys():
+            raise SyntaxError("Essa variável já existe")
         else:
-            self.symbol_table[identifier] = (None,type)
+            self.table[key] = value
+
+class FuncTable:
+    def __init__(self):
+        self.table = {}
+
+    def setter(self, key, value):
+        self.table[key] = value
+        
+    def getter(self, key):
+        return self.table[key]
     
 class Node:
     def __init__(self, value, children):
-        self.value = value
+        self.value = value 
         self.children = children
 
-    def evaluate(self, table: SymbolTable):
+    def evaluate(self, symbol_table):
         pass
-
 
 class BinOp(Node):
     def Evaluate(self, table: SymbolTable, funcTable: SymbolTable):
@@ -70,97 +71,100 @@ class BinOp(Node):
             raise Exception("Erro")
 
 class UnOp(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        var = self.children[0].evaluate(table,funcTable)
-        if (var[1] == "int"):  
-            if self.value == "+":
-                return (1 * var[0] , var[1])
-            elif self.value == "-":
-                return (-1 * var[0],var[1])
-            elif self.value == "!":
-                return (not (var[0]), var[1])
-            else:
-                raise Exception("Erro")
+    def evaluate(self, symbol_table):
+        if self.value == "+":
+            return (self.children[0].evaluate(symbol_table)[0], "int")
+        elif self.value == "!":
+            return (not self.children[0].evaluate(symbol_table)[0], "int")
         else:
-            raise Exception("Erro")
+            return (-self.children[0].evaluate(symbol_table)[0], "int")
 
 class IntVal(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        return (self.value,"int")
+    def evaluate(self, symbol_table):
+        return (int(self.value), "int")
     
 class NoOp(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
+    def evaluate(self, symbol_table):
         pass
     
-class StringVal(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        return (self.value,"string")
+class StrVal(Node):
+    def evaluate(self, symbol_table):
+        return (self.value, "string")
     
 class Assigment(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        table.set(self.children[0].value, self.children[1].Evaluate(table,funcTable))
+    def evaluate(self, symbol_table):
+        symbol_table.setter(self.children[0].value, self.children[1].evaluate(symbol_table))
 
 class Identifier(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        return table.get(self.value)
-
+    def evaluate(self, symbol_table):
+        return symbol_table.getter(self.value)
+    
 class Block(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        for node in self.children:
-            if type(node) == ReturnFunc:
-                guarda = node.evaluate(table,funcTable)
-                return guarda
-            node.evaluate(table,funcTable)
+    def evaluate(self, symbol_table):
+        for child in self.children:
+            if isinstance(child, ReturnNode):
+                return child.evaluate(symbol_table)
 
 class PrintLn(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        print(self.children[0].evaluate(table,funcTable)[0])
+    def evaluate(self, symbol_table):
+        print(self.children[0].evaluate(symbol_table)[0])
         
 class ScanLn(Node):
-    def Evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        return (int(input()),"int")
+    def evaluate(self, symbol_table):
+        return (int(input()), "int")
 
 class If(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        if self.children[0].evaluate(table,funcTable)[0]:
-            self.children[1].evaluate(table,funcTable)
-        elif len(self.children) > 2:
-            self.children[2].evaluate(table,funcTable)
+    def evaluate(self, symbol_table):
+        if self.children[0].evaluate(symbol_table)[0]:
+            self.children[1].evaluate(symbol_table)
+        elif len(self.children)>2:
+            self.children[2].evaluate(symbol_table)
 
 class For(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        self.children[0].evaluate(table,funcTable)
-        while self.children[1].evaluate(table,funcTable)[0]:            
-            self.children[2].evaluate(table,funcTable)
-            self.children[3].evaluate(table,funcTable)
+    def evaluate(self, symbol_table):
+        self.children[0].evaluate(symbol_table)
+        while self.children[1].evaluate(symbol_table)[0]:
+            self.children[3].evaluate(symbol_table)
+            self.children[2].evaluate(symbol_table)
             
 class VarDec(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        table.assing(self.children[0],self.value)
-        if len(self.children)>1:
-            a = self.children[1].evaluate(table,funcTable)
-            table.set(self.children[0],a)
+    def evaluate(self, symbol_table):
+        if len(self.children) == 1:
+            if self.value == "int":
+                symbol_table.create(self.children[0].value, (0, self.value))
+            elif self.value == "string":
+                symbol_table.create(self.children[0].value, ("", self.value))
+            
+        else:
+            tipo = self.children[1].evaluate(symbol_table)
+            if self.value != tipo[1]:
+                raise SyntaxError("Tipo errado")
+            symbol_table.create(self.children[0].value, (tipo[0], self.value))
 
-class ReturnFunc(Node):
-    def evaluate(self, table: SymbolTable,funcTable: SymbolTable):
-        return self.children[0].evaluate(table,funcTable)
+class ReturnNode(Node):
+    def evaluate(self, symbol_table):
+        return self.children[0].evaluate(symbol_table)
          
 class FuncDec(Node):
-    def Evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        table.assing(self.value[0],self.value[1])
-        funcTable.assing(self.value[0],self.value[1])
-        funcTable.assing(self.value[0],(self,self.value[1]))
-    
+    def evaluate(self, symbol_table):
+        FuncTable.setter(self.children[0].children[0].value, (self, self.children[0].value))
+ 
 class FuncCall(Node):
-    def evaluate(self, table: SymbolTable, funcTable: SymbolTable):
-        decnode,type = funcTable.get(self.value)
-        local_ST = SymbolTable()
-        i = 1
-        while i < len(decnode.children) - 1:
-            decnode.children[i].evaluate(local_ST,funcTable)
-            local_ST.set(decnode.children[i].children[0],self.children[i-1].evaluate(table,funcTable))
-            i+=1
-            
-        a = decnode.children[-1].evaluate(local_ST,funcTable)
-        return a
+    def evaluate(self, symbol_table):
+        call = FuncTable.getter(self.value)
         
+        if len(call[0].children) != len(self.children)+2:
+            raise SyntaxError("Número de argumentos errados")
+        
+        nst = SymbolTable()
+        for i in range(len(self.children)):
+            call[0].children[i+1].evaluate(nst)
+            nst.setter(call[0].children[i+1].children[0].value, self.children[i].evaluate(symbol_table))
+        
+        result = call[0].children[-1].evaluate(nst)
+        
+        if result is not None:
+            if call[1] != result[1]:
+                raise SyntaxError("Tipo de função errado")
+            else:
+                return result

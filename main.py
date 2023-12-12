@@ -1,382 +1,404 @@
 import sys
 import re
-import string
 from Node import *
 from Token import Token
 from Tokenizer import *
 
-
-with open(sys.argv[1], 'r') as f:
-    input = f.read()
-
-
 class PrePro:
-    def __init__(self, source):
-        self.source = source
+    @staticmethod
+    def filter(source):
+        source = re.sub(r'\/\/[^\n]*', '', source) 
+        source = re.sub(r'\/\*.*?\*\/', '', source, flags=re.DOTALL)  
 
-    def filter(self):
-        with open(self.source, "r") as input_file:
-            code = input_file.read()
-
-        code = re.sub(r"//.*", "", code)
-
-        lines = code.split("\n")
-
-        if re.search(r"\d\s+\d", code):
-            raise Exception("Nao separar numeros com espaco")
+        lines = source.split('\n')
+        non_empty_lines = [line for line in lines if line.strip() != '']
         
-        code = "\n".join([line.lstrip("\t") for line in lines])
-        
-        return code
-    
+        filtered_source = '\n'.join(non_empty_lines)
 
-class ParserError(Exception):
-    pass
-
+        return filtered_source.strip()
 
 class Parser:
     tokens = None
 
     def parseProgram(self):
-        childrens = []
-        while self.tokens.next.type != EOF:
-            childrens.append(self.parseDeclaration())
-            while self.tokens.next.type == '\n':
-                self.tokens.selectNext()
-        return childrens
+        children = []
+        while self.tokenizer.next.type != "EOF":
+            children.append(self.parseDeclaration())
+        children_main = FuncCall("MC", [])
+        children.append(children_main)
+        return Block(None, children)
     
     def parseFactor(self):
-        node = 0
-        if self.tokens.next.type == "NUMBER":
-            node = IntVal(self.tokens.next.value, [])
-            self.tokens.selectNext()
-            if self.tokens.next.type == "NUMBER":
-                raise Exception("codigo incorreto")
+        
+        if self.tokenizer.next.type == "INT":
+            result = self.tokenizer.next.value
+            self.tokenizer.selectNext()
+            res = IntVal(result, [])
+            return res
+        
+        elif self.tokenizer.next.type == "STRING":
+            result = self.tokenizer.next.value
+            self.tokenizer.selectNext()
+            string = StrVal(result, [])
+            return string
+        
+        elif self.tokenizer.next.type == "IDENTIFIER":
+            result = self.tokenizer.next.value
+            identi = Identifier(result, [])
+            self.tokenizer.selectNext()
+            if self.tokenizer.next.type == "OPEN_PAR":
+                res = FuncCall(identi.value, [])
+                self.tokenizer.selectNext()
+                
+                if self.tokenizer.next.type != "CLOSE_PAR":
+                    arg = self.parseBoolExpression()
+                    res.children.append(arg)
+                    while self.tokenizer.next.type == 'COMMA':
+                        self.tokenizer.selectNext()
+                        arg = self.parseBoolExpression()
+                        res.children.append(arg)
+                    
+                    if self.tokenizer.next.type == 'CLOSE_PAR':
+                        self.tokenizer.selectNext()
+                        return res
+                    
+                else:
+                    self.tokenizer.selectNext()
+                    return res
+            else:
+                return identi
+    
+        
+        elif self.tokenizer.next.type == 'PLUS':
+            self.tokenizer.selectNext()
+            return UnOp("+", [self.parseFactor()])
+        
+        elif self.tokenizer.next.type == 'MINUS':
+            self.tokenizer.selectNext()
+            return UnOp("-", [self.parseFactor()])
+        
+        elif self.tokenizer.next.type == 'NOT':
+            self.tokenizer.selectNext()
+            return UnOp("!", [self.parseFactor()])
+        
+        
+        elif self.tokenizer.next.type == "SCANLN":
+            self.tokenizer.selectNext()
+            if self.tokenizer.next.type == 'OPEN_PAR':
+                self.tokenizer.selectNext()
+                if self.tokenizer.next.type == 'CLOSE_PAR':
+                    self.tokenizer.selectNext()
+                    if self.tokenizer.next.type == 'BREAKLINE':
+                        return ScanLn("Scanln", [])
+                else:
+                    raise SyntaxError("Erro: Caractere inválido")
+        
+        elif self.tokenizer.next.type == 'OPEN_PAR':
+            self.tokenizer.selectNext()
+            result = self.parseBoolExpression()
+            if self.tokenizer.next.type == 'CLOSE_PAR':
+                self.tokenizer.selectNext()
+                return result
+            else:
+                raise SyntaxError("Erro: Caractere inválido")
             
-        elif self.tokens.next.type == "STRING":
-            node = StringVal(self.tokens.next.value, [])
-            self.tokens.selectNext()
-        elif self.tokens.next.type == "IDENTIFIER":
-            identifier_name = self.tokens.next.value
-            self.tokens.selectNext()
-            if self.tokens.next.type == "OPEN_PAR":
-                self.tokens.selectNext()
-                nodes = []
-                if self.tokens.next.type == "COMMA":
-                    raise Exception("codigo incorreto")
-                
-                while self.tokens.next.type != "CLOSE_PAR":
-                    nodes.append(self.parseBoolExpression())
-                    if self.tokens.next.type == "COMMA":
-                        self.tokens.selectNext()
-                        nodes.append(self.parseBoolExpression())
-                
-                self.tokens.selectNext()
-                node = FuncCall(identifier_name,nodes)
-            else:
-                node = Identifier(identifier_name, [])
-        elif self.tokens.next.type == "PLUS":
-            self.tokens.selectNext()
-            node = UnOp("+", [self.parseFactor()])
-        elif self.tokens.next.type == "MINUS":
-            self.tokens.selectNext()
-            node = UnOp("-", [self.parseFactor()])
-        elif self.tokens.next.type == "NOT":
-            self.tokens.selectNext()
-            node = UnOp("!", [self.parseFactor()])
-        elif self.tokens.next.type == "OPEN_PAR":
-            self.tokens.selectNext()
-            node = self.parseBoolExpression()
-            if self.tokens.next.type == "CLOSE_PAR":
-                self.tokens.selectNext()
-            else:
-                raise Exception("codigo incorreto")
-        elif self.tokens.next.type == "SCANLN":
-            self.tokens.selectNext()
-            if self.tokens.next.type == "OPEN_PAR":
-                self.tokens.selectNext()
-                node = ScanLn("Scanln", [])
-                if self.tokens.next.type != "CLOSE_PAR":
-                    raise Exception("codigo incorreto")
-                self.tokens.selectNext()
+        
         else:
-            raise Exception("codigo incorreto")
-
-        return node
+            raise SyntaxError("Erro: Caractere inválido")
+            
 
     def parseTerm(self):
-        node = self.parseFactor()
-        while self.tokens.next.type == "MULTIPLY" or self.tokens.next.type == "DIVIDE":
-            if self.tokens.next.type == "MULTIPLY":
-                self.tokens.selectNext()
-                node = BinOp("*", [node, self.parseFactor()])
-            elif self.tokens.next.type == "DIVIDE":
-                self.tokens.selectNext()
-                node = BinOp("/", [node, self.parseFactor()])
-            else:
-                raise Exception("codigo incorreto")
-
-        return node
+        result = self.parseFactor()
+        while self.tokenizer.next.type == 'MULT' or self.tokenizer.next.type == 'DIV':
+            op = self.tokenizer.next
+            if op.type == 'MULT':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseFactor()])
+            elif op.type == 'DIV':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseFactor()])
+                   
+        return result
     
     def parseExpression(self):
-        node = self.parseTerm()
-        while self.tokens.next.type == "PLUS" or self.tokens.next.type == "MINUS" or self.tokens.next.type == "CONCAT":
-            if self.tokens.next.type == "PLUS":
-                self.tokens.selectNext()
-                node = BinOp("+", [node, self.parseTerm()])
-            elif self.tokens.next.type == "MINUS":
-                self.tokens.selectNext()
-                node = BinOp("-", [node, self.parseTerm()])
-            elif self.tokens.next.type == "CONCAT":
-                self.tokens.selectNext()
-                node = BinOp(".", [node, self.parseTerm()])
+        result = self.parseTerm()
+        #print(result.value)
+        while self.tokenizer.next.type == 'PLUS' or self.tokenizer.next.type == 'MINUS' or self.tokenizer.next.type == 'CONCAT':
+            op = self.tokenizer.next
+            if op.type == 'PLUS':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseTerm()])
+            elif op.type == 'MINUS':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseTerm()])
 
-        if self.tokens.next.type == INT or self.tokens.next.type == STR:
-            raise Exception("codigo incorreto")
-
-        return node
+            elif op.type == 'CONCAT':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseTerm()])
+                   
+        return result
     
     def parseStatement(self):
-        if self.tokens.next.type == "IDENTIFIER":
-            identifier_name = self.tokens.next.value
-            variable = Identifier(identifier_name, [])
-            self.tokens.selectNext()
-            if self.tokens.next.type == "ASSIGN":
-                self.tokens.selectNext()
-                variable = Assigment("=", [variable, self.parseBoolExpression()])
-            elif self.tokens.next.type == "OPEN_PAR":
-                self.tokens.selectNext()
-                nodes = []                
-                if self.tokens.next.type == "COMMA":
-                    raise Exception("codigo incorreto")
-                
-                while self.tokens.next.type != "CLOSE_PAR":
-                    nodes.append(self.parseBoolExpression())
-                    if self.tokens.next.type == "COMMA":
-                        self.tokens.selectNext()
-                        nodes.append(self.parseBoolExpression())
-                self.tokens.selectNext()        
-                variable = FuncCall(identifier_name,nodes)
-            else:
-                raise Exception("operacao nn suportada")
-        elif self.tokens.next.type == "PRINTLN":
-            self.tokens.selectNext()
-            if self.tokens.next.type == "OPEN_PAR":
-                self.tokens.selectNext()
-                variable = PrintLn("PrintLn", [self.parseBoolExpression()])
-                if self.tokens.next.type == "CLOSE_PAR":
-                    self.tokens.selectNext()
-                    if self.tokens.next.type == "BREAKLINE" or self.tokens.next.type == EOF:
-                        self.tokens.selectNext()
-                    else:
-                        raise Exception("codigo incorreto")
-                else:
-                    raise Exception("codigo incorreto")
-        elif self.tokens.next.type == "VAR":
-            self.tokens.selectNext()
-            if self.tokens.next.type == "IDENTIFIER":
-                name = self.tokens.next.value
-                self.tokens.selectNext()
-                if self.tokens.next.type in ["T_INT", "T_STRING"]:
-                    tipo = self.tokens.next.type
-                    self.tokens.selectNext()
-                    if self.tokens.next.type == "ASSIGN":
-                        self.tokens.selectNext()
-                        variable = VarDec(tipo, [name, self.parseBoolExpression()])
-                    elif self.tokens.next.type == EOF or self.tokens.next.type == "BREAKLINE":
-                        variable = VarDec(tipo, [name])
-                        self.tokens.selectNext()
-                    else:
-                        raise Exception("codigo incorreto")
-        elif self.tokens.next.type == "IF":
-            self.tokens.selectNext()
-            condition_node = self.parseBoolExpression()
-            node = self.parseBlock()
-            if self.tokens.next.type == "BREAKLINE" or self.tokens.next.type == EOF:
-                variable = If("if", [condition_node, node])
-            else:
-                if self.tokens.next.type == "ELSE":
-                    self.tokens.selectNext()
-                    variable = If("if", [condition_node, node, self.parseBlock()])
-                    if self.tokens.next.type == "BREAKLINE":
-                        self.tokens.selectNext()
-                    else:
-                        raise Exception("codigo incorreto")
-                else:
-                    raise Exception("codigo incorreto")
-        elif self.tokens.next.type == "FOR":
-            self.tokens.selectNext()
-            if self.tokens.next.type == "IDENTIFIER":
-                variable = Identifier(self.tokens.next.value, [])
-                self.tokens.selectNext()
-                if self.tokens.next.type == "ASSIGN":
-                    self.tokens.selectNext()
-                    a = Assigment("=", [variable, self.parseBoolExpression()])
-                    if self.tokens.next.type == "SEMICOLUMN":
-                        self.tokens.selectNext()
-                        b = self.parseBoolExpression()
-                        if self.tokens.next.type == "SEMICOLUMN":
-                            self.tokens.selectNext()
-                            if self.tokens.next.type == "IDENTIFIER":
-                                variable = Identifier(self.tokens.next.value, [])
-                                self.tokens.selectNext()
-                                if self.tokens.next.type == "ASSIGN":
-                                    self.tokens.selectNext()
-                                    c = Assigment(
-                                        "=", [variable, self.parseBoolExpression()]
-                                    )  # for increment
-                                    block = self.parseBlock()
-                                    variable = For("if", [a, b, block, c])
-                                    if (
-                                        self.tokens.next.type == "BREAKLINE"
-                                        or self.tokens.next.type == EOF
-                                    ):
-                                        self.tokens.selectNext()
-                                    else:
-                                        raise Exception("codigo incorreto")
-                                else:
-                                    raise Exception("operacao nn suportada")
-                            else:
-                                raise Exception(
-                                    "for assignment ; condition; expression {block}"
-                                )
-                        else:
-                            raise Exception(
-                                "for assignment ; condition; expression {block}"
-                            )
-                    else:
-                        raise Exception(
-                            "for assignment ; condition; expression {block}"
-                        )
-                else:
-                    raise Exception("for assignment ; condition; expression {block}")
-        elif self.tokens.next.type == "RETURN":
-            self.tokens.selectNext()
-            variable = ReturnFunc("return",[self.parseBoolExpression()])
-        elif self.tokens.next.type == "BREAKLINE":
-            self.tokens.selectNext()
-            variable = NoOp("NoOp", [])
-        else:
-            raise Exception("codigo incorreto")
+        if self.tokenizer.next.type == 'IDENTIFIER':
+            assign = self.parseAssigments()
+            self.tokenizer.selectNext()
+            return assign
 
-        return variable
+        elif self.tokenizer.next.type == 'PRINTLN':
+            self.tokenizer.selectNext()
+            if self.tokenizer.next.type == 'OPEN_PAR':
+                self.tokenizer.selectNext()
+                result = self.parseBoolExpression()
+                if self.tokenizer.next.type == 'CLOSE_PAR':
+                    self.tokenizer.selectNext()
+                    final = PrintLn(None, [result])
+                    if self.tokenizer.next.type == 'BREAKLINE':
+                        self.tokenizer.selectNext()
+                        return final
+                    elif self.tokenizer.next.type == 'EOF':
+                        return final
+                    else:
+                        raise SyntaxError("Erro: NEWLINE PRINTLN")
+                else:
+                    raise SyntaxError("Erro: CLOSE")
+            else:
+                raise SyntaxError("Erro: OPEN")
+            
+        elif self.tokenizer.next.type == "IF":
+            self.tokenizer.selectNext()
+            condi = self.parseBoolExpression()
+            block_if = self.parseBlock()
+            if self.tokenizer.next.type == "ELSE":
+                self.tokenizer.selectNext()
+                block_else = self.parseBlock()
+                if self.tokenizer.next.type == "BREAKLINE" or self.tokenizer.next.type == "EOF":
+                    self.tokenizer.selectNext()
+                    if self.tokenizer.next.type == "OPEN_BRACE":
+                        raise SyntaxError("Erro: Sintaxe no else")
+                    return If(None, [condi, block_if, block_else])
+            elif self.tokenizer.next.type == "EOF" or self.tokenizer.next.type == "BREAKLINE":
+                self.tokenizer.selectNext()
+                if self.tokenizer.next.type == "ELSE" or self.tokenizer.next.type == "OPEN_BRACE":
+                    raise SyntaxError("Erro: Sintaxe no if ")
+                return If(None, [condi, block_if])        
+            else:
+                raise SyntaxError("Erro: IDENTAÇÃO")  
+        
+        elif self.tokenizer.next.type == 'FOR':
+            self.tokenizer.selectNext()
+            init = self.parseAssigments()
+            if self.tokenizer.next.type == 'SEMICOLUMN':
+                self.tokenizer.selectNext()
+                condition = self.parseBoolExpression()
+                if self.tokenizer.next.type == 'SEMICOLUMN':
+                    self.tokenizer.selectNext()
+                    inc = self.parseAssigments()
+                    block_for = self.parseBlock()
+                    if self.tokenizer.next.type == 'BREAKLINE':
+                        self.tokenizer.selectNext()
+                        return For("for", [init, condition, inc, block_for])
+                    elif self.tokenizer.next.type == 'EOF':
+                        return For("for", [init, condition, inc, block_for])
+                    else:
+                        #print(repr(self.tokenizer.next.value))
+                        raise SyntaxError("Erro: NEWLINE IDENTIFIER")
+            else:
+                raise SyntaxError("Erro: init for")
+        
+        elif self.tokenizer.next.type == 'VAR':
+            self.tokenizer.selectNext()
+            if self.tokenizer.next.type == 'IDENTIFIER':
+                identi = Identifier(self.tokenizer.next.value, [])
+                self.tokenizer.selectNext()
+                if self.tokenizer.next.type == 'TYPE':
+                    tipo = self.tokenizer.next.value 
+                    decvar = VarDec(tipo, [identi])
+                    self.tokenizer.selectNext()
+                    if self.tokenizer.next.type == 'EQUAL':
+                        self.tokenizer.selectNext()
+                        result = VarDec(tipo, [identi, self.parseBoolExpression()])
+                        if self.tokenizer.next.type == 'BREAKLINE' or self.tokenizer.next.type == 'EOF':
+                            #print(self.tokenizer.next.type)
+                            self.tokenizer.selectNext()
+                            return result
+                    elif self.tokenizer.next.type == 'BREAKLINE' or self.tokenizer.next.type == 'EOF':
+                        self.tokenizer.selectNext()
+                        return decvar
+                    else:
+                        raise SyntaxError("Erro: Na hora de declarar")
+
+        elif self.tokenizer.next.type == 'RETURN':
+            self.tokenizer.selectNext()
+            final = ReturnNode(None, [self.parseBoolExpression()])
+            if self.tokenizer.next.type == 'BREAKLINE':
+                self.tokenizer.selectNext()
+                return final
+            
+        elif self.tokenizer.next.type == 'BREAKLINE' or self.tokenizer.next.type == 'EOF':
+            result = NoOp(None, None)
+            return result
+        else:
+            raise SyntaxError("Erro: caracter errado")
 
     def parseBlock(self):
-        childrens = []
-        if self.tokens.next.type == "OPEN_BRACE":
-            self.tokens.selectNext()
-            if self.tokens.next.type == "BREAKLINE":
-                self.tokens.selectNext()
-                while self.tokens.next.type != "CLOSE_BRACE":
-                    node = self.parseStatement()
-                    childrens.append(node)
-                self.tokens.selectNext()
-                if self.tokens.next.type not in ["BREAKLINE",EOF,"ELSE"]:
-                    raise Exception("espaço necessario")
+        command = []
+        if self.tokenizer.next.type == 'OPEN_BRACE':
+            self.tokenizer.selectNext()
+            
+            if self.tokenizer.next.type == 'BREAKLINE':
+                self.tokenizer.selectNext()
+                while self.tokenizer.next.type != 'CLOSE_BRACE':
+                    command.append(self.parseStatement())
             else:
-                raise Exception("codigo incorreto")
-        master = Block("Block", childrens)
-        return master
+                raise SyntaxError("Erro: Abre Chaves no IF")
+            self.tokenizer.selectNext()
+        return Block(None, command)
     
     def parseRelExpression(self):
-        node = self.parseExpression()
-        while self.tokens.next.type == "COMPARE" or self.tokens.next.type == "GREATER" or self.tokens.next.type == "LESS":
-            if self.tokens.next.type == "COMPARE":
-                self.tokens.selectNext()
-                node = BinOp("==", [node, self.parseExpression()])
-            elif self.tokens.next.type == "GREATER":
-                self.tokens.selectNext()
-                node = BinOp(">", [node, self.parseExpression()])
-            elif self.tokens.next.type == "LESS":
-                self.tokens.selectNext()
-                node = BinOp("<", [node, self.parseExpression()])
-
-        if self.tokens.next.type == INT:
-            raise Exception("codigo incorreto")
-
-        return node
+        result = self.parseExpression()
+        #print(result)
+        while self.tokenizer.next.type == 'COMPARE' or self.tokenizer.next.type == 'GREATER' or self.tokenizer.next.type == 'LESS':
+            op = self.tokenizer.next
+            
+            if op.type == 'COMPARE':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseExpression()])
+            elif op.type == 'GREATER':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseExpression()])
+            elif op.type == 'LESS':
+                self.tokenizer.selectNext()
+                result = BinOp(op.value, [result, self.parseExpression()])
+                   
+        return result
     
     def parseBoolTerm(self):
-        node = self.parseRelExpression()
-        while self.tokens.next.type == "AND":
-            self.tokens.selectNext()
-            node = BinOp("&&", [node, self.parseRelExpression()])
-
-        if self.tokens.next.type == INT:
-            raise Exception("codigo incorreto")
-        return node
+        result = self.parseRelExpression()
+        #print(result)
+        while self.tokenizer.next.type == 'AND':
+            op = self.tokenizer.next
+            self.tokenizer.selectNext()
+            result = BinOp(op.value, [result, self.parseRelExpression()])
+                   
+        return result
 
     def parseBoolExpression(self):
-        node = self.parseBoolTerm()
-        while self.tokens.next.type == "OR":
-            self.tokens.selectNext()
-            node = BinOp("||", [node, self.parseBoolTerm()])
-
-        if self.tokens.next.type == INT:
-            raise Exception("codigo incorreto")
-
-        return node
+        result = self.parseBoolTerm()
+        #print(result)
+        while self.tokenizer.next.type == 'OR':
+            op = self.tokenizer.next
+            self.tokenizer.selectNext()
+            result = BinOp(op.value, [result, self.parseBoolTerm()])    
+        return result
+    
+    def parseAssigments(self):
+        args = []
+        if self.tokenizer.next.type == 'IDENTIFIER':
+            identi = Identifier(self.tokenizer.next.value, [])
+            self.tokenizer.selectNext()
+            
+            if self.tokenizer.next.type == 'EQUAL':
+                self.tokenizer.selectNext()
+                result = Assigment(None, [identi, self.parseBoolExpression()])
+                if self.tokenizer.next.type == 'IDENTIFIER' or self.tokenizer.next.type == 'COMMA' or self.tokenizer.next.type == 'CLOSE_PAR':
+                    raise SyntaxError("Erro: Assigment")
+                return result
+            elif self.tokenizer.next.type == 'OPEN_PAR':
+                self.tokenizer.selectNext()
+                
+                if self.tokenizer.next.type != 'CLOSE_PAR':
+                    arg = self.parseBoolExpression()
+                    args.append(arg)
+                    while self.tokenizer.next.type == 'COMMA':
+                        self.tokenizer.selectNext()
+                        arg = self.parseBoolExpression()
+                        args.append(arg)
+                    
+                    if self.tokenizer.next.type == 'CLOSE_PAR':
+                        self.tokenizer.selectNext()
+                        return FuncCall(identi.value, args)
+                    else:
+                        raise SyntaxError("Erro: fecha funccall")
+                elif self.tokenizer.next.type == 'CLOSE_PAR':
+                    self.tokenizer.selectNext()
+                    return FuncCall(identi.value, [])
+                else:
+                    raise SyntaxError("Erro: fecha funccall")
+            else:
+                raise SyntaxError("Erro: fecha funccall")
     
     def parseDeclaration(self):
-        argumentos = []
-        if self.tokens.next.type == "FUNC":
-            self.tokens.selectNext()
-            if self.tokens.next.type == "IDENTIFIER":
-                nome_funcao = self.tokens.next.value
-                self.tokens.selectNext()
-                if self.tokens.next.type == "OPEN_PAR":
-                    self.tokens.selectNext()
-                    if self.tokens.next.type == "COMMA":
-                        raise Exception("virgula nn suportada")
-                    
-                    while self.tokens.next.type != "OPEN_PAR":
-                        if self.tokens.next.type == "IDENTIFIER":
-                            nome_argumento = self.tokens.next.value
-                            self.tokens.selectNext()
-                            if self.tokens.next.type in ["T_INT","T_STRING"]:
-                                tipo_argumento = self.tokens.next.type
-                                arg = VarDec(tipo_argumento, [nome_argumento])
-                                argumentos.append(arg)
-                                self.tokens.selectNext()
-                            else:
-                                raise Exception("declaracao incorreta")
-                        elif self.tokens.next.type == "COMMA":
-                            self.tokens.selectNext()
-                            if self.tokens.next.type == "CLOSE_PAR":
-                                raise Exception("parenteses nn suportado")
-                        else:
-                            raise Exception("codigo incorreto")
-                    
-                    self.tokens.selectNext()
-                    if self.tokens.next.type in ["T_INT","T_STRING"]:
-                        tipo_func = self.tokens.next.type
-                        func_dec = VarDec(tipo_func, [nome_funcao])
-                        argumentos.insert(0,func_dec)
-                        self.tokens.selectNext()
-                        argumentos.append(self.parseBlock())
-                        variable = FuncDec((nome_funcao,tipo_func),argumentos)
-                    else:
-                        raise Exception("declaracao incorreta de funcao")
-        return variable
+        
+        while self.tokenizer.next.type == 'BREAKLINE':
+            self.tokenizer.selectNext()
+        
+        if self.tokenizer.next.type == 'FUNC':
+            self.tokenizer.selectNext()
+            result = FuncDec(None, [])
+            if self.tokenizer.next.type == 'IDENTIFIER':
+                func_name = Identifier(self.tokenizer.next.value, [])
+                self.tokenizer.selectNext()
+                if self.tokenizer.next.type == 'OPEN_PAR':
+                    self.tokenizer.selectNext()
+                    if self.tokenizer.next.type == 'CLOSE_PAR':
+                        self.tokenizer.selectNext()
+                        if self.tokenizer.next.type == 'TYPE':
+                            func_type = self.tokenizer.next.value
+                            self.tokenizer.selectNext()
+                            block = self.parseBlock()
+                            var_name = VarDec(func_type, [func_name])
+                            return FuncDec(None, [var_name, block])
+                            
+                    elif self.tokenizer.next.type == 'IDENTIFIER':
+                        arg = Identifier(self.tokenizer.next.value, [])
+                        self.tokenizer.selectNext()
+                        if self.tokenizer.next.type == 'TYPE':
+                            tipo = self.tokenizer.next.value
+                            result.children.append(VarDec(tipo, [arg]))
+                            self.tokenizer.selectNext()
+                            
+                            while self.tokenizer.next.type == 'COMMA':
+                                self.tokenizer.selectNext()
+                                if self.tokenizer.next.type == 'IDENTIFIER':
+                                    arg = Identifier(self.tokenizer.next.value, [])
+                                    self.tokenizer.selectNext()
+                                    if self.tokenizer.next.type == 'TYPE':
+                                        tipo = self.tokenizer.next.value
+                                        result.children.append(VarDec(tipo, [arg]))
+                                        self.tokenizer.selectNext()
+                                    
+                            if self.tokenizer.next.type == 'CLOSE_PAR':
+                                self.tokenizer.selectNext()
+                                if self.tokenizer.next.type == 'TYPE':
+                                    func_type = self.tokenizer.next.value
+                                    self.tokenizer.selectNext()
+                                    block = self.parseBlock()
+                                    result.children.append(block)
+                                    var_name = VarDec(func_type, [func_name])
+                                    result.children.insert(0, var_name)
+                                    return result
+        else:
+            raise SyntaxError("Erro: funcao")
 
     def run(self, code):
-        filtered = PrePro(code).filter()
-        identifier_table = SymbolTable()
-        function_table = SymbolTable()
-        self.tokens = Tokenizer(filtered)
-        self.tokens.selectNext()
-        list_of_nodes = self.parseProgram()
-        if self.tokens.next.type == EOF:
-            for node in list_of_nodes:
-                node.evaluate(identifier_table,function_table)
-                
-            main_node = FuncCall('main',[])
-            main_node.evaluate(identifier_table,function_table)
-        else:
-            raise Exception("codigo incorreto")
+        pre_processo = PrePro.filter(code)
+        Parser.tokenizer = Tokenizer(pre_processo)
+        self.tokenizer.selectNext()
+        result = self.parseProgram()
+        if self.tokenizer.next.type != 'EOF':
+            raise SyntaxError("EOFFFFFFF")
+        return result
 
 
 if __name__ == "__main__":
-    chain = sys.argv[1]
-    parser = Parser()
-    final = parser.run(chain)
+    symbol_table = SymbolTable()
+    FT = FuncTable()
+    p = Parser()
+    file = sys.argv[1]
+    with open(file, 'r') as arquivo:
+        conteudo = arquivo.read()+'\n'
+    arquivo.close()
+    
+    teste = p.run(conteudo)
+    teste.evaluate(p)
+
