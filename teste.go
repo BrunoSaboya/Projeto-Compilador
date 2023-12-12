@@ -81,4 +81,3 @@ func main() int {
     Println(a < b)
     Println(a > b)
 }
-
